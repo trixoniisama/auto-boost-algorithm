@@ -2,15 +2,17 @@ import statistics
 from math import ceil
 import json
 import sys
-from vapoursynth import vs, core
+import subprocess
+import vapoursynth as vs
+core = vs.core
 
 if "--help" in sys.argv[1:]:
-    print('Usage:\npython auto-boost_2.0.py "{animu.mkv}" "{scenes.json}" {base CQ/CRF/Q}"\n\nExample:\npython "auto-boost_2.0.py" "path/to/nice_boat.mkv" "path/to/scenes.json" 30')
+    print('Usage:\npython auto-boost_2.0.py "{animu.mkv}" {base CQ/CRF/Q}"\n\nExample:\npython "auto-boost_2.0.py" "path/to/nice_boat.mkv" 30')
     exit(0)
 else:
     pass
 
-og_cq = int(sys.argv[3]) # CQ to start from
+og_cq = int(sys.argv[2]) # CQ to start from
 br = 10 # maximum CQ change from original
 
 def get_ranges(scenes):
@@ -36,10 +38,7 @@ def calculate_standard_deviation(score_list: list[int]):
     average = sum(filtered_score_list)/len(filtered_score_list)
     return (average, sorted_score_list[len(filtered_score_list)//20])
 
-scenes_loc = sys.argv[2] # scene file is expected to be named 'scenes.json'
-ranges = get_ranges(scenes_loc)
-
-fast_av1an_command = f'av1an -i "{sys.argv[1]}" --temp "{scenes_loc[:-11]}/temp/" -y \
+fast_av1an_command = f'av1an -i "{sys.argv[1]}" --temp "{sys.argv[1][:-4]}/temp/" -y \
                     --verbose --keep --split-method av-scenechange -m lsmash \
                     --min-scene-len 12 -c mkvmerge --sc-downscale-height 480 \
                     --set-thread-affinity 2 -e svt-av1 --force -v \" \
@@ -55,6 +54,9 @@ exit_code = p.wait()
 if exit_code != 0:
     print("Av1an encountered an error, exiting.")
     exit(-2)
+
+scenes_loc = f"{sys.argv[1][:-4]}/temp/scenes.json"
+ranges = get_ranges(scenes_loc)
 
 src = core.lsmas.LWLibavSource(source=sys.argv[1], cache=0)
 enc = core.lsmas.LWLibavSource(source=f"{sys.argv[1][:-4]}_fastpass.mkv", cache=0)

@@ -30,16 +30,16 @@ _Inspiration was drawn from the original Av1an (python) boosting code_
 ## Version 2.0: SSIMULACRA2-based
 
 > Does a fast encode of the provided file, calculates SSIMULACRA2 scores of each chunks and adjusts CRF per-scene to be closer to the average total score, in a _zones.txt_ file to feed Av1an.
-The requirements are Vapoursynth, vstools, LSMASHSource, Av1an and vapoursynth-ssimulacra2.
+The requirements are Vapoursynth, vstools, LSMASHSource, fmtconv, Av1an and vapoursynth-ssimulacra2.
 
 __Usage:__
 ```
-python auto-boost_2.0.py "{animu.mkv}" "{scenes.json}" {base CQ/CRF/Q}
+python auto-boost_2.0.py "{animu.mkv}" {base CQ/CRF/Q}
 ```
 
 __Example:__
 ```
-python auto-boost_2.0.py "path/to/nice_boat.mkv" "path/to/scenes.json" 30
+python auto-boost_2.0.py "path/to/nice_boat.mkv" 30
 ```
 
 __Advantages:__
