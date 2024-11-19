@@ -211,10 +211,7 @@ def calculate_xpsnr(src_file, enc_path, xpsnr_txt_path):
     if IS_WINDOWS:
         xpsnr_txt_path = xpsnr_txt_path.replace(':', r'\\:')
 
-    if IS_WINDOWS:
-        xpsnr_command = f'ffmpeg -i "{src_file}" -i "{enc_path}" -lavfi xpsnr="stats_file={xpsnr_txt_path}" -f null {NULL_DEVICE}'
-    else:
-        xpsnr_command = f'ffmpeg -i {src_file} -i {enc_path} -lavfi xpsnr="stats_file={xpsnr_txt_path}" -f null {NULL_DEVICE}'
+    xpsnr_command = f'ffmpeg -i "{src_file}" -i "{enc_path}" -lavfi xpsnr="stats_file={xpsnr_txt_path}" -f null {NULL_DEVICE}'
     
     p = subprocess.Popen(xpsnr_command, shell=True)
     exit_code = p.wait()
