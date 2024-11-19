@@ -87,6 +87,12 @@ def fast_pass(
     :type workers: int
     """
 
+    if IS_WINDOWS:
+        # Enclose paths in quotes if they contain spaces
+        input_file = f'"{input_file}"' if ' ' in input_file else input_file
+        output_file = f'"{output_file}"' if ' ' in output_file else output_file
+        tmp_dir = f'"{tmp_dir}"' if ' ' in tmp_dir else tmp_dir
+
     fast_av1an_command = [
         'av1an',
         '-i', input_file,
@@ -101,12 +107,12 @@ def fast_pass(
         '--set-thread-affinity', '2',
         '-e', 'svt-av1',
         '--force',
-        '-v', f'--preset {preset} --crf {crf:.2f} --lp 2 --scm 0 --keyint 0 --fast-decode 1 --color-primaries 1 --transfer-characteristics 1 --matrix-coefficients 1',
+        '-v', f'"--preset {preset} --crf {crf:.2f} --lp 2 --scm 0 --keyint 0 --fast-decode 1 --color-primaries 1 --transfer-characteristics 1 --matrix-coefficients 1"',
         '-w', str(workers),
         '-o', output_file
     ]
 
-    process = subprocess.run(fast_av1an_command, check=True)
+    process = subprocess.run(' '.join(fast_av1an_command), shell=True, check=True)
     
     if process.returncode != 0:
         print(f"Av1an exited with code: {process.returncode}")
