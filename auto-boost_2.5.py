@@ -26,7 +26,7 @@ if shutil.which("turbo-metrics") is None:
     default_skip = 3
 else:
     ssimu2zig = False
-    default_skip = 0
+    default_skip = 1
 
 parser = argparse.ArgumentParser()
 parser.add_argument("-s", "--stage", help = "Select stage: 1 = encode, 2 = calculate metrics, 3 = generate zones | Default: all", default=0)
@@ -36,7 +36,7 @@ parser.add_argument("-d", "--deviation", help = "Maximum CRF change from origina
 parser.add_argument("-p", "--preset", help = "Fast encode preset | Default: 9", default=9)
 parser.add_argument("-w", "--workers", help = "Number of av1an workers | Default: amount of physical cores", default=psutil.cpu_count(logical=False))
 parser.add_argument("-m", "--metrics", help = "Select metrics: 1 = SSIMU2, 2 = XPSNR, 3 = Both | Default: 1", default=1)
-parser.add_argument("-S", "--skip", help = "SSIMU2 skip value, every nth frame's SSIMU2 is calculated | Default: 0 for turbo-metrics, 3 for vs-zip")
+parser.add_argument("-S", "--skip", help = "SSIMU2 skip value, every nth frame's SSIMU2 is calculated | Default: 1 for turbo-metrics, 3 for vs-zip")
 parser.add_argument("-z", "--zones", help = "Zones calculation method: 1 = SSIMU2, 2 = XPSNR, 3 = Multiplication, 4 = Lowest Result | Default: 1", default=1)
 parser.add_argument("-a", "--aggressive", action='store_true', help = "More aggressive boosting | Default: not active")
 args = parser.parse_args()
