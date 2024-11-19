@@ -87,11 +87,10 @@ def fast_pass(
     :type workers: int
     """
 
-    if IS_WINDOWS:
-        # Enclose paths in quotes if they contain spaces
-        input_file = f'"{input_file}"' if ' ' in input_file else input_file
-        output_file = f'"{output_file}"' if ' ' in output_file else output_file
-        tmp_dir = f'"{tmp_dir}"' if ' ' in tmp_dir else tmp_dir
+    # Enclose paths in quotes if they contain spaces
+    input_file = f'"{input_file}"' if ' ' in input_file else input_file
+    output_file = f'"{output_file}"' if ' ' in output_file else output_file
+    tmp_dir = f'"{tmp_dir}"' if ' ' in tmp_dir else tmp_dir
 
     fast_av1an_command = [
         'av1an',
