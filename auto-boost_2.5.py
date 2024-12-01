@@ -62,7 +62,7 @@ def get_ranges(scenes: str) -> list[int]:
     :rtype: list[int]
     """
     ranges = [0]
-    with open(scenes, "r") as file:
+    with scenes.open("r") as file:
         content = json.load(file)
         for scene in content['scenes']:
             ranges.append(scene['end_frame'])
@@ -155,7 +155,7 @@ def calculate_ssimu2(src_file, enc_file, ssimu2_txt_path, ranges, skip):
     if not ssimu2zig:  # Try turbo-metrics first if ssimu2zig is False
         turbo_metrics_run = turbo_metrics(src_file, enc_file, skip)
         if turbo_metrics_run.returncode == 0:  # If turbo-metrics succeeds
-            with open(ssimu2_txt_path, "w") as file:
+            with ssimu2_txt_path.open("w") as file:
                 file.write(f"skip: {skip}\n")
             frame = 0
             # for whatever reason, turbo-metrics in csv mode dumps the entire scores to stdout at the end even though it prints them live to stdout.
@@ -171,7 +171,7 @@ def calculate_ssimu2(src_file, enc_file, ssimu2_txt_path, ranges, skip):
                 # assume everything not "ssimulacra2" is a score.
                 if line != "ssimulacra2":
                     frame += 1
-                    with open(ssimu2_txt_path, "a") as file:
+                    with ssimu2_txt_path.open("a") as file:
                         file.write(f"{frame}: {float(line)}\n")
             return  # Exit if turbo-metrics succeeded
         else:
@@ -190,7 +190,7 @@ def calculate_ssimu2(src_file, enc_file, ssimu2_txt_path, ranges, skip):
 
     print(f"source: {len(source_clip)} frames")
     print(f"encode: {len(encoded_clip)} frames")
-    with open(ssimu2_txt_path, "w") as file:
+    with ssimu2_txt_path.open("w") as file:
         file.write(f"skip: {skip}\n")
     iter = 0
     for i in range(len(ranges) - 1):
@@ -200,7 +200,7 @@ def calculate_ssimu2(src_file, enc_file, ssimu2_txt_path, ranges, skip):
         for index, frame in enumerate(result.frames()):
             iter += 1
             score = frame.props['_SSIMULACRA2']
-            with open(ssimu2_txt_path, "a") as file:
+            with ssimu2_txt_path.open("a") as file:
                 file.write(f"{iter}: {score}\n")
 
 def calculate_xpsnr(src_file, enc_path, xpsnr_txt_path):
@@ -229,9 +229,9 @@ def get_xpsnr(xpsnr_txt_path):
     sum_weighted = 0
     values_weighted: list[int] = []
 
-    with open(xpsnr_txt_path, "r") as file:
+    with xpsnr_txt_path.open("r") as file:
         for line in file:
-            match = re.search(r"XPSNR [yY]: ([0-9]+\.[0-9]+)  XPSNR [uU]: ([0-9]+\.[0-9]+)  XPSNR(?: v:| :) ([0-9]+\.[0-9]+)", line)
+            match = re.search(r"XPSNR [yY]: ([0-9]+\.[0-9]+)  XPSNR [uU]: ([0-9]+\.[0-9]+)  XPSNR [vV]: ([0-9]+\.[0-9]+)", line)
             if match:
                 Y = float(match.group(1))
                 U = float(match.group(2))
@@ -252,7 +252,7 @@ def get_xpsnr(xpsnr_txt_path):
 def get_ssimu2(ssimu2_txt_path):
     ssimu2_scores: list[int] = []
 
-    with open(ssimu2_txt_path, "r") as file:
+    with ssimu2_txt_path.open("r") as file:
         skipmatch = re.search(r"skip: ([0-9]+)", file.readline())
         if skipmatch:
             skip = int(skipmatch.group(1))
@@ -320,7 +320,7 @@ def generate_zones(ranges: list, percentile_5_total: list, average: int, crf: fl
               f'Chunk 5th percentile: {percentile_5_total[i]}\n'
               f'Adjusted CRF: {new_crf:.2f}\n')
 
-        with open(zones_txt_path, "w" if zones_iter == 1 else "a") as file:
+        with zones_txt_path.open("w" if zones_iter == 1 else "a") as file:
             file.write(f"{ranges[i]} {ranges[i+1]} svt-av1 --crf {new_crf:.2f}\n")
 
 def calculate_metrics(src_file, output_file, tmp_dir, ranges, skip, metrics):
