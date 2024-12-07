@@ -277,7 +277,7 @@ def calculate_std_dev(score_list: list[int]):
     :type score_list: list
     """
 
-    filtered_score_list = [score for score in score_list if score >= 0]
+    filtered_score_list = [score if score >= 0 else 0.0 for score in score_list]
     sorted_score_list = sorted(filtered_score_list)
     average = sum(filtered_score_list)/len(filtered_score_list)
     percentile_5 = sorted_score_list[len(filtered_score_list)//20]
