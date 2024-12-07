@@ -2,6 +2,7 @@
 #Contributors: R1chterScale, Yiss and Kosaka
 
 from math import ceil
+from pathlib import Path
 import json
 import os
 import subprocess
@@ -41,11 +42,11 @@ parser.add_argument("-z", "--zones", help = "Zones calculation method: 1 = SSIMU
 parser.add_argument("-a", "--aggressive", action='store_true', help = "More aggressive boosting | Default: not active")
 args = parser.parse_args()
 stage = int(args.stage)
-src_file = args.input
-output_dir = os.path.dirname(src_file)
-tmp_dir = os.path.join(output_dir, "temp")
-output_file = os.path.join(output_dir, f"{os.path.splitext(os.path.basename(src_file))[0]}_fastpass.mkv")
-scenes_file = os.path.join(tmp_dir, "scenes.json")
+src_file = Path(args.input).resolve()
+output_dir = src_file.parent
+tmp_dir = output_dir / "temp"
+output_file = output_dir / f"{src_file.stem}_fastpass.mkv"
+scenes_file = tmp_dir / "scenes.json"
 br = float(args.deviation)
 skip = args.skip if args.skip is not None else default_skip
 aggressive = args.aggressive
@@ -61,7 +62,7 @@ def get_ranges(scenes: str) -> list[int]:
     :rtype: list[int]
     """
     ranges = [0]
-    with open(scenes, "r") as file:
+    with scenes.open("r") as file:
         content = json.load(file)
         for scene in content['scenes']:
             ranges.append(scene['end_frame'])
@@ -87,11 +88,6 @@ def fast_pass(
     :type workers: int
     """
 
-    # Enclose paths in quotes if they contain spaces
-    input_file = f'"{input_file}"' if ' ' in input_file else input_file
-    output_file = f'"{output_file}"' if ' ' in output_file else output_file
-    tmp_dir = f'"{tmp_dir}"' if ' ' in tmp_dir else tmp_dir
-
     fast_av1an_command = [
         'av1an',
         '-i', input_file,
@@ -106,16 +102,16 @@ def fast_pass(
         '--set-thread-affinity', '2',
         '-e', 'svt-av1',
         '--force',
-        '-v', f'"--preset {preset} --crf {crf:.2f} --lp 2 --scm 0 --keyint 0 --fast-decode 1 --color-primaries 1 --transfer-characteristics 1 --matrix-coefficients 1"',
+        '-v', f'--preset {preset} --crf {crf:.2f} --lp 2 --scm 0 --keyint 0 --fast-decode 1 --color-primaries 1 --transfer-characteristics 1 --matrix-coefficients 1',
         '-w', str(workers),
         '-o', output_file
     ]
 
-    process = subprocess.run(' '.join(fast_av1an_command), shell=True, check=True)
-    
-    if process.returncode != 0:
-        print(f"Av1an exited with code: {process.returncode}")
-        exit(1)
+    try:
+        subprocess.run(fast_av1an_command, text=True, check=True)
+    except subprocess.CalledProcessError as e:
+       print(f"Av1an encountered an error:\n{e}")
+       exit(1)
 
 def turbo_metrics(
     source: str, distorted: str, every: int
@@ -159,7 +155,7 @@ def calculate_ssimu2(src_file, enc_file, ssimu2_txt_path, ranges, skip):
     if not ssimu2zig:  # Try turbo-metrics first if ssimu2zig is False
         turbo_metrics_run = turbo_metrics(src_file, enc_file, skip)
         if turbo_metrics_run.returncode == 0:  # If turbo-metrics succeeds
-            with open(ssimu2_txt_path, "w") as file:
+            with ssimu2_txt_path.open("w") as file:
                 file.write(f"skip: {skip}\n")
             frame = 0
             # for whatever reason, turbo-metrics in csv mode dumps the entire scores to stdout at the end even though it prints them live to stdout.
@@ -175,7 +171,7 @@ def calculate_ssimu2(src_file, enc_file, ssimu2_txt_path, ranges, skip):
                 # assume everything not "ssimulacra2" is a score.
                 if line != "ssimulacra2":
                     frame += 1
-                    with open(ssimu2_txt_path, "a") as file:
+                    with ssimu2_txt_path.open("a") as file:
                         file.write(f"{frame}: {float(line)}\n")
             return  # Exit if turbo-metrics succeeded
         else:
@@ -194,7 +190,7 @@ def calculate_ssimu2(src_file, enc_file, ssimu2_txt_path, ranges, skip):
 
     print(f"source: {len(source_clip)} frames")
     print(f"encode: {len(encoded_clip)} frames")
-    with open(ssimu2_txt_path, "w") as file:
+    with ssimu2_txt_path.open("w") as file:
         file.write(f"skip: {skip}\n")
     iter = 0
     for i in range(len(ranges) - 1):
@@ -204,20 +200,27 @@ def calculate_ssimu2(src_file, enc_file, ssimu2_txt_path, ranges, skip):
         for index, frame in enumerate(result.frames()):
             iter += 1
             score = frame.props['_SSIMULACRA2']
-            with open(ssimu2_txt_path, "a") as file:
+            with ssimu2_txt_path.open("a") as file:
                 file.write(f"{iter}: {score}\n")
 
 def calculate_xpsnr(src_file, enc_path, xpsnr_txt_path):
     if IS_WINDOWS:
-        xpsnr_txt_path = xpsnr_txt_path.replace(':', r'\\:')
+        xpsnr_txt_path = f"{src_file.stem}_xpsnr.log"
+        src_file_dir = src_file.parent
+        os.chdir(src_file_dir)
 
-    xpsnr_command = f'ffmpeg -i "{src_file}" -i "{enc_path}" -lavfi xpsnr="stats_file={xpsnr_txt_path}" -f null {NULL_DEVICE}'
-    
-    p = subprocess.Popen(xpsnr_command, shell=True)
-    exit_code = p.wait()
+    xpsnr_command = [
+        "ffmpeg",
+        "-i", src_file,
+        "-i", enc_path,
+        "-lavfi", f"xpsnr=stats_file={xpsnr_txt_path}",
+        "-f", "null", NULL_DEVICE
+    ]
 
-    if exit_code != 0:
-        print("XPSNR encountered an error, exiting.")
+    try:
+        subprocess.run(xpsnr_command, text=True, check=True)
+    except subprocess.CalledProcessError as e:
+        print(f"XPSNR encountered an error:\n{e}")
         exit(-2)
 
 def get_xpsnr(xpsnr_txt_path):
@@ -226,9 +229,9 @@ def get_xpsnr(xpsnr_txt_path):
     sum_weighted = 0
     values_weighted: list[int] = []
 
-    with open(xpsnr_txt_path, "r") as file:
+    with xpsnr_txt_path.open("r") as file:
         for line in file:
-            match = re.search(r"XPSNR Y: ([0-9]+\.[0-9]+)  XPSNR U: ([0-9]+\.[0-9]+)  XPSNR : ([0-9]+\.[0-9]+)", line)
+            match = re.search(r"XPSNR [yY]: ([0-9]+\.[0-9]+)  XPSNR [uU]: ([0-9]+\.[0-9]+)  XPSNR [vV]: ([0-9]+\.[0-9]+)", line)
             if match:
                 Y = float(match.group(1))
                 U = float(match.group(2))
@@ -249,7 +252,7 @@ def get_xpsnr(xpsnr_txt_path):
 def get_ssimu2(ssimu2_txt_path):
     ssimu2_scores: list[int] = []
 
-    with open(ssimu2_txt_path, "r") as file:
+    with ssimu2_txt_path.open("r") as file:
         skipmatch = re.search(r"skip: ([0-9]+)", file.readline())
         if skipmatch:
             skip = int(skipmatch.group(1))
@@ -317,29 +320,29 @@ def generate_zones(ranges: list, percentile_5_total: list, average: int, crf: fl
               f'Chunk 5th percentile: {percentile_5_total[i]}\n'
               f'Adjusted CRF: {new_crf:.2f}\n')
 
-        with open(zones_txt_path, "w" if zones_iter == 1 else "a") as file:
+        with zones_txt_path.open("w" if zones_iter == 1 else "a") as file:
             file.write(f"{ranges[i]} {ranges[i+1]} svt-av1 --crf {new_crf:.2f}\n")
 
 def calculate_metrics(src_file, output_file, tmp_dir, ranges, skip, metrics):
     match metrics:
         case 1:
-            ssimu2_txt_path = os.path.join(output_dir, f"{os.path.splitext(os.path.basename(src_file))[0]}_ssimu2.log")
+            ssimu2_txt_path = output_dir / f"{src_file.stem}_ssimu2.log"
             calculate_ssimu2(src_file, output_file, ssimu2_txt_path, ranges, skip)
         case 2:
-            xpsnr_txt_path = os.path.join(output_dir, f"{os.path.splitext(os.path.basename(src_file))[0]}_xpsnr.log")
+            xpsnr_txt_path = output_dir / f"{src_file.stem}_xpsnr.log"
             calculate_xpsnr(src_file, output_file, xpsnr_txt_path)
         case 3:
-            xpsnr_txt_path = os.path.join(output_dir, f"{os.path.splitext(os.path.basename(src_file))[0]}_xpsnr.log")
-            ssimu2_txt_path = os.path.join(output_dir, f"{os.path.splitext(os.path.basename(src_file))[0]}_ssimu2.log")
+            xpsnr_txt_path = output_dir / f"{src_file.stem}_xpsnr.log"
+            ssimu2_txt_path = output_dir / f"{src_file.stem}_ssimu2.log"
             calculate_xpsnr(src_file, output_file, xpsnr_txt_path)
             calculate_ssimu2(src_file, output_file, ssimu2_txt_path, ranges, skip)
 
 def calculate_zones(tmp_dir, ranges, zones, cq):
     match zones:
         case 1:
-            ssimu2_txt_path = os.path.join(output_dir, f"{os.path.splitext(os.path.basename(src_file))[0]}_ssimu2.log")
+            ssimu2_txt_path = output_dir / f"{src_file.stem}_ssimu2.log"
             (ssimu2_scores, skip) = get_ssimu2(ssimu2_txt_path)
-            ssimu2_zones_txt_path = f"{tmp_dir}/ssimu2_zones.txt"
+            ssimu2_zones_txt_path = tmp_dir / "ssimu2_zones.txt"
             ssimu2_total_scores: list[int] = []
             ssimu2_percentile_5_total = []
             ssimu2_iter = 0
@@ -365,9 +368,9 @@ def calculate_zones(tmp_dir, ranges, zones, cq):
             generate_zones(ranges, ssimu2_percentile_5_total, ssimu2_average, cq, ssimu2_zones_txt_path)
 
         case 2:
-            xpsnr_txt_path = os.path.join(output_dir, f"{os.path.splitext(os.path.basename(src_file))[0]}_xpsnr.log")
+            xpsnr_txt_path = output_dir / f"{src_file.stem}_xpsnr.log"
             xpsnr_scores: list[int] = get_xpsnr(xpsnr_txt_path)
-            xpsnr_zones_txt_path = f"{tmp_dir}/xpsnr_zones.txt"
+            xpsnr_zones_txt_path = tmp_dir / "xpsnr_zones.txt"
             xpsnr_total_scores: list[int] = []
             xpsnr_percentile_5_total = []
             xpsnr_iter = 0
@@ -391,12 +394,12 @@ def calculate_zones(tmp_dir, ranges, zones, cq):
             generate_zones(ranges, xpsnr_percentile_5_total, xpsnr_average, cq, xpsnr_zones_txt_path)
 
         case 3:
-            ssimu2_txt_path = os.path.join(output_dir, f"{os.path.splitext(os.path.basename(src_file))[0]}_ssimu2.log")
+            ssimu2_txt_path = output_dir / f"{src_file.stem}_ssimu2.log"
             (ssimu2_scores, skip) = get_ssimu2(ssimu2_txt_path)
-            xpsnr_txt_path = os.path.join(output_dir, f"{os.path.splitext(os.path.basename(src_file))[0]}_xpsnr.log")
+            xpsnr_txt_path = output_dir / f"{src_file.stem}_xpsnr.log"
             xpsnr_scores: list[int] = get_xpsnr(xpsnr_txt_path)
 
-            multiplied_zones_txt_path = f"{tmp_dir}/multiplied_zones.txt"
+            multiplied_zones_txt_path = tmp_dir / "multiplied_zones.txt"
             multiplied_total_scores: list[int] = []
             multiplied_percentile_5_total = []
             multiplied_iter = 0
@@ -426,12 +429,12 @@ def calculate_zones(tmp_dir, ranges, zones, cq):
 
 
         case 4:
-            ssimu2_txt_path = os.path.join(output_dir, f"{os.path.splitext(os.path.basename(src_file))[0]}_ssimu2.log")
+            ssimu2_txt_path = output_dir / f"{src_file.stem}_ssimu2.log"
             (ssimu2_scores, skip) = get_ssimu2(ssimu2_txt_path)
-            xpsnr_txt_path = os.path.join(output_dir, f"{os.path.splitext(os.path.basename(src_file))[0]}_xpsnr.log")
+            xpsnr_txt_path = output_dir / f"{src_file.stem}_xpsnr.log"
             xpsnr_scores: list[int] = get_xpsnr(xpsnr_txt_path)
 
-            minimum_zones_txt_path = f"{tmp_dir}/minimum_zones.txt"
+            minimum_zones_txt_path = tmp_dir / "minimum_zones.txt"
             minimum_total_scores: list[int] = []
             minimum_percentile_5_total = []
             minimum_iter = 0
