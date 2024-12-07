@@ -32,6 +32,7 @@ else:
 parser = argparse.ArgumentParser()
 parser.add_argument("-s", "--stage", help = "Select stage: 1 = encode, 2 = calculate metrics, 3 = generate zones | Default: all", default=0)
 parser.add_argument("-i", "--input", required=True, help = "Video input filepath (original source file)")
+parser.add_argument("-t", "--temp", help = "The temporary directory for av1an to store files in | Default: input file name")
 parser.add_argument("-q", "--quality", help = "Base quality (CRF) | Default: 30", default=30)
 parser.add_argument("-d", "--deviation", help = "Maximum CRF change from original | Default: 10", default=10)
 parser.add_argument("-p", "--preset", help = "Fast encode preset | Default: 9", default=9)
@@ -44,7 +45,8 @@ args = parser.parse_args()
 stage = int(args.stage)
 src_file = Path(args.input).resolve()
 output_dir = src_file.parent
-tmp_dir = output_dir / "temp"
+tmp_dir_name = args.temp if args.temp is not None else src_file.stem
+tmp_dir = output_dir / tmp_dir_name
 output_file = output_dir / f"{src_file.stem}_fastpass.mkv"
 scenes_file = tmp_dir / "scenes.json"
 br = float(args.deviation)
