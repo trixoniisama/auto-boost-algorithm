@@ -231,11 +231,11 @@ def get_xpsnr(xpsnr_txt_path):
 
     with xpsnr_txt_path.open("r") as file:
         for line in file:
-            match = re.search(r"XPSNR [yY]: ([0-9]+\.[0-9]+)  XPSNR [uU]: ([0-9]+\.[0-9]+)  XPSNR [vV]: ([0-9]+\.[0-9]+)", line)
+            match = re.search(r"XPSNR [yY]: ([0-9]+\.[0-9]+|inf)  XPSNR [uU]: ([0-9]+\.[0-9]+|inf)  XPSNR [vV]: ([0-9]+\.[0-9]+|inf)", line)
             if match:
-                Y = float(match.group(1))
-                U = float(match.group(2))
-                V = float(match.group(3))
+                Y = float(match.group(1)) if match.group(1) != 'inf' else 100.0
+                U = float(match.group(2)) if match.group(2) != 'inf' else 100.0
+                V = float(match.group(3)) if match.group(3) != 'inf' else 100.0
                 W = (4 * Y + U + V) / 6
 
                 sum_weighted += W
