@@ -1,5 +1,5 @@
 #Originally by Trix
-#Contributors: R1chterScale, Yiss and Kosaka
+#Contributors: R1chterScale, Yiss, Kosaka & others from AV1 Weeb edition
 
 from math import ceil
 from pathlib import Path
@@ -183,7 +183,12 @@ def calculate_ssimu2(src_file, enc_file, ssimu2_txt_path, ranges, skip):
             skip = args.skip if args.skip is not None else '3'
 
     # If ssimu2zig is True or turbo-metrics failed, use vs-zip
-    source_clip = core.lsmas.LWLibavSource(source=src_file, cache=0)
+    is_vpy = os.path.splitext(os.path.basename(src_file))[1] == ".vpy"
+    vpy_vars = {}
+    if is_vpy:
+        exec(open(src_file).read(), globals(), vpy_vars)
+    # in order for auto-boost to use a .vpy file as a source, the output clip should be a global variable named clip
+    source_clip = core.lsmas.LWLibavSource(source=src_file, cache=0) if not is_vpy else vpy_vars["clip"]
     encoded_clip = core.lsmas.LWLibavSource(source=enc_file, cache=0)
 
     #source_clip = source_clip.resize.Bicubic(format=vs.RGBS, matrix_in_s='709').fmtc.transfer(transs="srgb", transd="linear", bits=32)
