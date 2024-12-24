@@ -1,5 +1,5 @@
 #Originally by Trix
-#Contributors: R1chterScale, Yiss and Kosaka
+#Contributors: R1chterScale, Yiss, Kosaka & others from AV1 Weeb edition
 
 from math import ceil
 from pathlib import Path
