@@ -50,7 +50,7 @@ tmp_dir = Path(args.temp).resolve() if args.temp is not None else output_dir / s
 output_file = output_dir / f"{src_file.stem}_fastpass.mkv"
 scenes_file = tmp_dir / "scenes.json"
 br = float(args.deviation)
-skip = args.skip if args.skip is not None else default_skip
+skip = int(args.skip) if int(args.skip) is not None else default_skip
 aggressive = args.aggressive
 
 def get_ranges(scenes: str) -> list[int]:
@@ -181,7 +181,7 @@ def calculate_ssimu2(src_file, enc_file, ssimu2_txt_path, ranges, skip):
             print(turbo_metrics_run.stdout)
             print(turbo_metrics_run.stderr)
             print("Falling back to vs-zip")
-            skip = args.skip if args.skip is not None else '3'
+            skip = int(args.skip) if args.skip is not None else 3
 
     # If ssimu2zig is True or turbo-metrics failed, use vs-zip
     is_vpy = os.path.splitext(os.path.basename(src_file))[1] == ".vpy"
@@ -200,7 +200,7 @@ def calculate_ssimu2(src_file, enc_file, ssimu2_txt_path, ranges, skip):
     with ssimu2_txt_path.open("w") as file:
         file.write(f"skip: {skip}\n")
     iter = 0
-    with tqdm(total=floor(len(source_clip) / skip), desc=f'Calculating SSIMULACRA 2 scores...') as pbar:
+    with tqdm(total=floor(len(source_clip) / int(skip)), desc=f'Calculating SSIMULACRA 2 scores') as pbar:
         for i in range(len(ranges) - 1):
             cut_source_clip = source_clip[ranges[i]:ranges[i+1]].std.SelectEvery(cycle=skip, offsets=1)
             cut_encoded_clip = encoded_clip[ranges[i]:ranges[i+1]].std.SelectEvery(cycle=skip, offsets=1)
