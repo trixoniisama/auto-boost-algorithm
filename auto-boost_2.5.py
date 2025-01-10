@@ -50,7 +50,7 @@ tmp_dir = Path(args.temp).resolve() if args.temp is not None else output_dir / s
 output_file = output_dir / f"{src_file.stem}_fastpass.mkv"
 scenes_file = tmp_dir / "scenes.json"
 br = float(args.deviation)
-skip = int(args.skip) if int(args.skip) is not None else default_skip
+skip = int(args.skip) if args.skip is not None else default_skip
 aggressive = args.aggressive
 
 def get_ranges(scenes: str) -> list[int]:
