@@ -200,7 +200,7 @@ def calculate_ssimu2(src_file, enc_file, ssimu2_txt_path, ranges, skip):
     with ssimu2_txt_path.open("w") as file:
         file.write(f"skip: {skip}\n")
     iter = 0
-    with tqdm(total=floor(len(source_clip) / int(skip)), desc=f'Calculating SSIMULACRA 2 scores') as pbar:
+    with tqdm(total=floor(len(source_clip)), desc=f'Calculating SSIMULACRA 2 scores') as pbar:
         for i in range(len(ranges) - 1):
             cut_source_clip = source_clip[ranges[i]:ranges[i+1]].std.SelectEvery(cycle=skip, offsets=1)
             cut_encoded_clip = encoded_clip[ranges[i]:ranges[i+1]].std.SelectEvery(cycle=skip, offsets=1)
