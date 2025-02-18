@@ -99,7 +99,6 @@ def fast_pass(
         '-i', input_file,
         '--temp', tmp_dir,
         '-y',
-        '--verbose',
         '--keep',
         '-m', 'lsmash',
         '-c', 'mkvmerge',
