@@ -103,7 +103,6 @@ def fast_pass(
         '-m', 'lsmash',
         '-c', 'mkvmerge',
         '--min-scene-len', '24',
-        '--sc-downscale-height', '720',
         '--set-thread-affinity', '2',
         '-e', 'svt-av1',
         '--force',
