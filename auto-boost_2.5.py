@@ -333,7 +333,7 @@ def generate_zones(ranges: list, percentile_5_total: list, average: int, crf: fl
               f'Adjusted CRF: {new_crf:.2f}\n')
 
         with zones_txt_path.open("w" if zones_iter == 1 else "a") as file:
-            file.write(f"{ranges[i]} {ranges[i+1]} svt-av1 --crf {new_crf:.2f} {video_params}\n")
+            file.write(f"{ranges[i]} {ranges[i+1]} svt-av1 --crf {new_crf:.2f} --lp 2 {video_params}\n")
 
 def calculate_metrics(src_file, output_file, tmp_dir, ranges, skip, metrics):
     match metrics:
