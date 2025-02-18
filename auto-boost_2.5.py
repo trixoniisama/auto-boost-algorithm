@@ -107,7 +107,7 @@ def fast_pass(
         '--set-thread-affinity', '2',
         '-e', 'svt-av1',
         '--force',
-        '-v', f'--preset {preset} --crf {crf:.2f} --lp 2 --scm 0 --keyint 0 --fast-decode 1 --color-primaries 1 --transfer-characteristics 1 --matrix-coefficients 1 {video_params}',
+        '-v', f'--preset {preset} --crf {crf:.2f} --lp 2 --keyint -1 {video_params}',
         '-w', str(workers),
         '-o', output_file
     ]
