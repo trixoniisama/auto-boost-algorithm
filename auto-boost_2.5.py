@@ -1,3 +1,12 @@
+# /// script
+# requires-python = ""
+# dependencies = [
+#   "tqdm",
+#   "psutil",
+#   "vapoursynth",
+# ]
+# ///
+
 #Originally by Trix
 #Contributors: R1chterScale, Yiss, Kosaka & others from AV1 Weeb edition
 
@@ -35,7 +44,9 @@ parser.add_argument("-s", "--stage", help = "Select stage: 1 = encode, 2 = calcu
 parser.add_argument("-i", "--input", required=True, help = "Video input filepath (original source file)")
 parser.add_argument("-t", "--temp", help = "The temporary directory for av1an to store files in | Default: video input filename")
 parser.add_argument("-q", "--quality", help = "Base quality (CRF) | Default: 30", default=30)
-parser.add_argument("-d", "--deviation", help = "Maximum CRF change from original | Default: 10", default=10)
+parser.add_argument("-d", "--deviation", help = "Base deviation limit for CRF changes (used if max_positive_dev or max_negative_dev not set) | Default: 10", default=10)
+parser.add_argument("--max-positive-dev", help = "Maximum allowed positive CRF deviation | Default: None", type=float, default=None)
+parser.add_argument("--max-negative-dev", help = "Maximum allowed negative CRF deviation | Default: None", type=float, default=None
 parser.add_argument("-p", "--preset", help = "Fast encode preset | Default: 9", default=9)
 parser.add_argument("-w", "--workers", help = "Number of av1an workers | Default: amount of physical cores", default=psutil.cpu_count(logical=False))
 parser.add_argument("-m", "--metrics", help = "Select metrics: 1 = SSIMU2, 2 = XPSNR, 3 = Both | Default: 1", default=1)
@@ -317,22 +328,45 @@ def generate_zones(ranges: list, percentile_5_total: list, average: int, crf: fl
     :type video_prams: str    
     """
     zones_iter = 0
+    # Determine effective deviation limits
+    base_deviation = float(args.deviation)
+    max_pos_dev = args.max_positive_dev
+    max_neg_dev = args.max_negative_dev
+    
+    # If neither max deviation is set, use base deviation for both
+    if max_pos_dev is None and max_neg_dev is None:
+        max_pos_dev = base_deviation
+        max_neg_dev = base_deviation
+    # If only one is set, use base deviation as the other limit
+    elif max_pos_dev is None:
+        max_pos_dev = base_deviation
+    elif max_neg_dev is None:
+        max_neg_dev = base_deviation
+    
     for i in range(len(ranges)-1):
         zones_iter += 1
-        if aggressive:
-            new_crf = crf - ceil((1.0 - (percentile_5_total[i] / average)) * 40 * 4) / 4
-        else:
-            new_crf = crf - ceil((1.0 - (percentile_5_total[i] / average)) * 20 * 4) / 4
+        
+        # Calculate CRF adjustment using aggressive or normal multiplier
+        multiplier = 40 if args.aggressive else 20
+        adjustment = ceil((1.0 - (percentile_5_total[i] / average)) * multiplier * 4) / 4
+        new_crf = crf - adjustment
 
-        if new_crf < crf - br: # set lowest allowed crf
-            new_crf = crf - br
-
-        if new_crf > crf + br: # set highest allowed crf
-            new_crf = crf + br
+        # Apply deviation limits
+        if adjustment < 0:  # Positive deviation (increasing CRF)
+            if max_pos_dev == 0:
+                new_crf = crf  # Never increase CRF if max_pos_dev is 0
+            elif abs(adjustment) > max_pos_dev:
+                new_crf = crf + max_pos_dev
+        else:  # Negative deviation (decreasing CRF)
+            if max_neg_dev == 0:
+                new_crf = crf  # Never decrease CRF if max_neg_dev is 0
+            elif abs(adjustment) > max_neg_dev:
+                new_crf = crf - max_neg_dev
 
         print(f'Enc:  [{ranges[i]}:{ranges[i+1]}]\n'
               f'Chunk 5th percentile: {percentile_5_total[i]}\n'
-              f'Adjusted CRF: {new_crf:.2f}\n')
+              f'CRF adjustment: {adjustment:.2f}\n'
+              f'Final CRF: {new_crf:.2f}\n')
 
         with zones_txt_path.open("w" if zones_iter == 1 else "a") as file:
             file.write(f"{ranges[i]} {ranges[i+1]} svt-av1 --crf {new_crf:.2f} --lp 2 {video_params}\n")
