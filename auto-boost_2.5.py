@@ -53,6 +53,7 @@ parser.add_argument("-m", "--metrics", help = "Select metrics: 1 = SSIMU2, 2 = X
 parser.add_argument("-S", "--skip", help = "SSIMU2 skip value, every nth frame's SSIMU2 is calculated | Default: 1 for turbo-metrics, 3 for vs-zip")
 parser.add_argument("-z", "--zones", help = "Zones calculation method: 1 = SSIMU2, 2 = XPSNR, 3 = Multiplication, 4 = Lowest Result | Default: 1", default=1)
 parser.add_argument("-a", "--aggressive", action='store_true', help = "More aggressive boosting | Default: not active")
+parser.add_argument("-v","--video_params", help="Custom encoder parameters for av1an")
 args = parser.parse_args()
 stage = int(args.stage)
 src_file = Path(args.input).resolve()
@@ -63,6 +64,7 @@ scenes_file = tmp_dir / "scenes.json"
 br = float(args.deviation)
 skip = int(args.skip) if args.skip is not None else default_skip
 aggressive = args.aggressive
+video_params = args.video_params
 
 def get_ranges(scenes: str) -> list[int]:
     """
@@ -82,7 +84,7 @@ def get_ranges(scenes: str) -> list[int]:
     return ranges
 
 def fast_pass(
-        input_file: str, output_file: str, tmp_dir: str, preset: int, crf: float, workers: int
+        input_file: str, output_file: str, tmp_dir: str, preset: int, crf: float, workers: int,video_params: str
 ):
     """
     Quick fast-pass using Av1an
@@ -99,6 +101,8 @@ def fast_pass(
     :type crf: float
     :param workers: number of workers
     :type workers: int
+    :param video_params: custom encoder params for av1an
+    :type video_prams: str
     """
 
     fast_av1an_command = [
@@ -106,16 +110,16 @@ def fast_pass(
         '-i', input_file,
         '--temp', tmp_dir,
         '-y',
-        '--verbose',
+	'--verbose',
         '--keep',
         '-m', 'lsmash',
         '-c', 'mkvmerge',
         '--min-scene-len', '24',
-        '--sc-downscale-height', '720',
+	'--sc-downscale-height', '720',
         '--set-thread-affinity', '2',
         '-e', 'svt-av1',
         '--force',
-        '-v', f'--preset {preset} --crf {crf:.2f} --lp 2 --scm 0 --keyint 0 --fast-decode 1 --color-primaries 1 --transfer-characteristics 1 --matrix-coefficients 1',
+        '-v', f'--preset {preset} --crf {crf:.2f} --lp 2 --keyint 0 --scm 0 --fast-decode 1 --color-primaries 1 --transfer-characteristics 1 --matrix-coefficients 1 {video_params}',
         '-w', str(workers),
         '-o', output_file
     ]
@@ -303,7 +307,7 @@ def calculate_std_dev(score_list: list[int]):
     percentile_95 = sorted_score_list[int (len(filtered_score_list)//(20/19))]
     return (average, percentile_5, percentile_95)
 
-def generate_zones(ranges: list, percentile_5_total: list, average: int, crf: float, zones_txt_path: str):
+def generate_zones(ranges: list, percentile_5_total: list, average: int, crf: float, zones_txt_path: str, video_params: str):
     """
     Appends a scene change to the ``zones_txt_path`` file in Av1an zones format.
 
@@ -320,6 +324,8 @@ def generate_zones(ranges: list, percentile_5_total: list, average: int, crf: fl
     :type crf: int
     :param zones_txt_path: Path to the zones.txt file
     :type zones_txt_path: str
+    :param video_params: custom encoder params for av1an
+    :type video_prams: str    
     """
     zones_iter = 0
     # Determine effective deviation limits
@@ -363,7 +369,7 @@ def generate_zones(ranges: list, percentile_5_total: list, average: int, crf: fl
               f'Final CRF: {new_crf:.2f}\n')
 
         with zones_txt_path.open("w" if zones_iter == 1 else "a") as file:
-            file.write(f"{ranges[i]} {ranges[i+1]} svt-av1 --crf {new_crf:.2f}\n")
+            file.write(f"{ranges[i]} {ranges[i+1]} svt-av1 --crf {new_crf:.2f} --lp 2 {video_params}\n")
 
 def calculate_metrics(src_file, output_file, tmp_dir, ranges, skip, metrics):
     match metrics:
@@ -379,7 +385,7 @@ def calculate_metrics(src_file, output_file, tmp_dir, ranges, skip, metrics):
             calculate_xpsnr(src_file, output_file, xpsnr_txt_path)
             calculate_ssimu2(src_file, output_file, ssimu2_txt_path, ranges, skip)
 
-def calculate_zones(tmp_dir, ranges, zones, cq):
+def calculate_zones(tmp_dir, ranges, zones, cq, video_params):
     match zones:
         case 1:
             ssimu2_txt_path = output_dir / f"{src_file.stem}_ssimu2.log"
@@ -407,7 +413,7 @@ def calculate_zones(tmp_dir, ranges, zones, cq):
             print(f'Median score:  {ssimu2_average}')
             print(f'5th Percentile:  {ssimu2_percentile_5}')
             print(f'95th Percentile:  {ssimu2_percentile_95}\n')
-            generate_zones(ranges, ssimu2_percentile_5_total, ssimu2_average, cq, ssimu2_zones_txt_path)
+            generate_zones(ranges, ssimu2_percentile_5_total, ssimu2_average, cq, ssimu2_zones_txt_path, video_params)
 
         case 2:
             xpsnr_txt_path = output_dir / f"{src_file.stem}_xpsnr.log"
@@ -433,7 +439,7 @@ def calculate_zones(tmp_dir, ranges, zones, cq):
             print(f'Median score:  {xpsnr_average}')
             print(f'5th Percentile:  {xpsnr_percentile_5}')
             print(f'95th Percentile:  {xpsnr_percentile_95}\n')
-            generate_zones(ranges, xpsnr_percentile_5_total, xpsnr_average, cq, xpsnr_zones_txt_path)
+            generate_zones(ranges, xpsnr_percentile_5_total, xpsnr_average, cq, xpsnr_zones_txt_path, video_params)
 
         case 3:
             ssimu2_txt_path = output_dir / f"{src_file.stem}_ssimu2.log"
@@ -467,7 +473,7 @@ def calculate_zones(tmp_dir, ranges, zones, cq):
             print(f'Median score:  {multiplied_average}')
             print(f'5th Percentile:  {multiplied_percentile_5}')
             print(f'95th Percentile:  {multiplied_percentile_95}\n')
-            generate_zones(ranges, multiplied_percentile_5_total, multiplied_average, cq, multiplied_zones_txt_path)
+            generate_zones(ranges, multiplied_percentile_5_total, multiplied_average, cq, multiplied_zones_txt_path, video_params)
 
 
         case 4:
@@ -508,33 +514,34 @@ def calculate_zones(tmp_dir, ranges, zones, cq):
             print(f'Median score:  {minimum_average}')
             print(f'5th Percentile:  {minimum_percentile_5}')
             print(f'95th Percentile:  {minimum_percentile_95}\n')
-            generate_zones(ranges, minimum_percentile_5_total, minimum_average, cq, minimum_zones_txt_path)
+            generate_zones(ranges, minimum_percentile_5_total, minimum_average, cq, minimum_zones_txt_path, video_params)
 
 match stage:
     case 0:
         workers = args.workers
         crf = float(args.quality)
         preset = args.preset
-        fast_pass(src_file, output_file, tmp_dir, preset, crf, workers)
+        video_params = args.video_params
+        fast_pass(src_file, output_file, tmp_dir, preset, crf, workers, video_params)
         ranges = get_ranges(scenes_file)
         metrics = int(args.metrics)
         calculate_metrics(src_file, output_file, tmp_dir, ranges, skip, metrics)
         zones = int(args.zones)
-        calculate_zones(tmp_dir, ranges, zones, crf)
+        calculate_zones(tmp_dir, ranges, zones, crf, video_params)
     case 1:
         workers = args.workers
         crf = float(args.quality)
         preset = args.preset
-        fast_pass(src_file, output_file, tmp_dir, preset, crf, workers)
+        fast_pass(src_file, output_file, tmp_dir, preset, crf, workers, video_params)
     case 2:
         ranges = get_ranges(scenes_file)
         metrics = int(args.metrics)
-        calculate_metrics(src_file, output_file, tmp_dir, ranges, skip, metrics)
+        calculate_metrics(src_file, output_file, tmp_dir, ranges, skip, metrics, video_params)
     case 3:
         ranges = get_ranges(scenes_file)
         zones = int(args.zones)
         crf = float(args.quality)
-        calculate_zones(tmp_dir, ranges, zones, crf)
+        calculate_zones(tmp_dir, ranges, zones, crf, video_params)
     case _:
         print(f"Stage argument invalid, exiting.")
         exit(-2)
