@@ -1,5 +1,5 @@
 # /// script
-# requires-python = ""
+# requires-python = ">=3.10"
 # dependencies = [
 #   "tqdm",
 #   "psutil",
