@@ -104,6 +104,9 @@ def fast_pass(
     :param video_params: custom encoder params for av1an
     :type video_prams: str
     """
+    encoder_params = f'--preset {preset} --crf {crf:.2f} --lp 2 --keyint 0 --scm 0 --fast-decode 1 --color-primaries 1 --transfer-characteristics 1 --matrix-coefficients 1'
+    if video_params:  # Only append video_params if it exists and is not None
+        encoder_params += f' {video_params}'
 
     fast_av1an_command = [
         'av1an',
@@ -119,7 +122,7 @@ def fast_pass(
         '--set-thread-affinity', '2',
         '-e', 'svt-av1',
         '--force',
-        '-v', f'--preset {preset} --crf {crf:.2f} --lp 2 --keyint 0 --scm 0 --fast-decode 1 --color-primaries 1 --transfer-characteristics 1 --matrix-coefficients 1 {video_params}',
+        '-v', encoder_params,
         '-w', str(workers),
         '-o', output_file
     ]
@@ -368,8 +371,12 @@ def generate_zones(ranges: list, percentile_5_total: list, average: int, crf: fl
               f'CRF adjustment: {adjustment:.2f}\n'
               f'Final CRF: {new_crf:.2f}\n')
 
+        zone_params = f"--crf {new_crf:.2f} --lp 2"
+        if video_params:  # Only append video_params if it exists and is not None
+            zone_params += f' {video_params}'
+
         with zones_txt_path.open("w" if zones_iter == 1 else "a") as file:
-            file.write(f"{ranges[i]} {ranges[i+1]} svt-av1 --crf {new_crf:.2f} --lp 2 {video_params}\n")
+            file.write(f"{ranges[i]} {ranges[i+1]} svt-av1 {zone_params}\n")
 
 def calculate_metrics(src_file, output_file, tmp_dir, ranges, skip, metrics):
     match metrics:
