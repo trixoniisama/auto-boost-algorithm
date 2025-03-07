@@ -1,5 +1,5 @@
 # /// script
-# requires-python = ""
+# requires-python = ">=3.10"
 # dependencies = [
 #   "tqdm",
 #   "psutil",
@@ -46,7 +46,7 @@ parser.add_argument("-t", "--temp", help = "The temporary directory for av1an to
 parser.add_argument("-q", "--quality", help = "Base quality (CRF) | Default: 30", default=30)
 parser.add_argument("-d", "--deviation", help = "Base deviation limit for CRF changes (used if max_positive_dev or max_negative_dev not set) | Default: 10", default=10)
 parser.add_argument("--max-positive-dev", help = "Maximum allowed positive CRF deviation | Default: None", type=float, default=None)
-parser.add_argument("--max-negative-dev", help = "Maximum allowed negative CRF deviation | Default: None", type=float, default=None
+parser.add_argument("--max-negative-dev", help = "Maximum allowed negative CRF deviation | Default: None", type=float, default=None)
 parser.add_argument("-p", "--preset", help = "Fast encode preset | Default: 9", default=9)
 parser.add_argument("-w", "--workers", help = "Number of av1an workers | Default: amount of physical cores", default=psutil.cpu_count(logical=False))
 parser.add_argument("-m", "--metrics", help = "Select metrics: 1 = SSIMU2, 2 = XPSNR, 3 = Both | Default: 1", default=1)
@@ -104,6 +104,9 @@ def fast_pass(
     :param video_params: custom encoder params for av1an
     :type video_prams: str
     """
+    encoder_params = f'--preset {preset} --crf {crf:.2f} --lp 2 --keyint 0 --scm 0 --fast-decode 1 --color-primaries 1 --transfer-characteristics 1 --matrix-coefficients 1'
+    if video_params:  # Only append video_params if it exists and is not None
+        encoder_params += f' {video_params}'
 
     fast_av1an_command = [
         'av1an',
@@ -119,7 +122,7 @@ def fast_pass(
         '--set-thread-affinity', '2',
         '-e', 'svt-av1',
         '--force',
-        '-v', f'--preset {preset} --crf {crf:.2f} --lp 2 --keyint 0 --scm 0 --fast-decode 1 --color-primaries 1 --transfer-characteristics 1 --matrix-coefficients 1 {video_params}',
+        '-v', encoder_params,
         '-w', str(workers),
         '-o', output_file
     ]
@@ -368,8 +371,12 @@ def generate_zones(ranges: list, percentile_5_total: list, average: int, crf: fl
               f'CRF adjustment: {adjustment:.2f}\n'
               f'Final CRF: {new_crf:.2f}\n')
 
+        zone_params = f"--crf {new_crf:.2f} --lp 2"
+        if video_params:  # Only append video_params if it exists and is not None
+            zone_params += f' {video_params}'
+
         with zones_txt_path.open("w" if zones_iter == 1 else "a") as file:
-            file.write(f"{ranges[i]} {ranges[i+1]} svt-av1 --crf {new_crf:.2f} --lp 2 {video_params}\n")
+            file.write(f"{ranges[i]} {ranges[i+1]} svt-av1 {zone_params}\n")
 
 def calculate_metrics(src_file, output_file, tmp_dir, ranges, skip, metrics):
     match metrics:
