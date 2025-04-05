@@ -543,7 +543,7 @@ match stage:
     case 2:
         ranges = get_ranges(scenes_file)
         metrics = int(args.metrics)
-        calculate_metrics(src_file, output_file, tmp_dir, ranges, skip, metrics, video_params)
+        calculate_metrics(src_file, output_file, tmp_dir, ranges, skip, metrics)
     case 3:
         ranges = get_ranges(scenes_file)
         zones = int(args.zones)
