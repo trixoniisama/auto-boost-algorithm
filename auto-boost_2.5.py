@@ -220,8 +220,12 @@ def calculate_ssimu2(src_file, enc_file, ssimu2_txt_path, ranges, skip):
     iter = 0
     with tqdm(total=floor(len(source_clip)), desc=f'Calculating SSIMULACRA 2 scores') as pbar:
         for i in range(len(ranges) - 1):
-            cut_source_clip = source_clip[ranges[i]:ranges[i+1]].std.SelectEvery(cycle=skip, offsets=1)
-            cut_encoded_clip = encoded_clip[ranges[i]:ranges[i+1]].std.SelectEvery(cycle=skip, offsets=1)
+            if skip > 1:
+                cut_source_clip = source_clip[ranges[i]:ranges[i+1]].std.SelectEvery(cycle=skip, offsets=1)
+                cut_encoded_clip = encoded_clip[ranges[i]:ranges[i+1]].std.SelectEvery(cycle=skip, offsets=1)
+            else:
+                cut_source_clip = source_clip[ranges[i]:ranges[i+1]]
+                cut_encoded_clip = encoded_clip[ranges[i]:ranges[i+1]]
             result = core.vszip.Metrics(cut_source_clip, cut_encoded_clip, mode=0)
             for index, frame in enumerate(result.frames()):
                 iter += 1
