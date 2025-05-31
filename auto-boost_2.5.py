@@ -123,12 +123,12 @@ def fast_pass(
         '-i', input_file,
         '--temp', tmp_dir,
         '-y',
-	    '--verbose',
+	'--verbose',
         '--keep',
         '-m', 'lsmash',
         '-c', 'mkvmerge',
         '--min-scene-len', '24',
-	    '--sc-downscale-height', '720',
+	'--sc-downscale-height', '720',
         '--set-thread-affinity', '2',
         '-e', 'svt-av1',
         '--force',
@@ -140,8 +140,8 @@ def fast_pass(
     try:
         subprocess.run(fast_av1an_command, text=True, check=True)
     except subprocess.CalledProcessError as e:
-        print(f"Av1an encountered an error:\n{e}")
-        exit(1)
+       print(f"Av1an encountered an error:\n{e}")
+       exit(1)
 
 def turbo_metrics(
     source: str, distorted: str, every: int
@@ -237,7 +237,7 @@ def calculate_ssimu2(src_file, enc_file, ssimu2_txt_path, ranges, skip):
                 cut_source_clip = source_clip #[ranges[i]:ranges[i+1]]
                 cut_encoded_clip = encoded_clip #[ranges[i]:ranges[i+1]]
 	    if not vship:
-		    result = core.vszip.Metrics(cut_source_clip, cut_encoded_clip, mode=0)
+		result = core.vszip.Metrics(cut_source_clip, cut_encoded_clip, mode=0)
 	    else:
 	    	result = core.vship.SSIMULACRA2(cut_source_clip, cut_encoded_clip)
             for index, frame in enumerate(result.frames()):
