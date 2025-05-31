@@ -47,7 +47,7 @@ parser.add_argument("-q", "--quality", help = "Base quality (CRF) | Default: 30"
 parser.add_argument("-d", "--deviation", help = "Base deviation limit for CRF changes (used if max_positive_dev or max_negative_dev not set) | Default: 10", default=10)
 parser.add_argument("--max-positive-dev", help = "Maximum allowed positive CRF deviation | Default: None", type=float, default=None)
 parser.add_argument("--max-negative-dev", help = "Maximum allowed negative CRF deviation | Default: None", type=float, default=None)
-parser.add_argument("-p", "--preset", help = "Fast encode preset | Default: 9", default=9)
+parser.add_argument("-p", "--preset", help = "Fast encode preset | Default: 8", default=8)
 parser.add_argument("-w", "--workers", help = "Number of av1an workers | Default: amount of physical cores", default=psutil.cpu_count(logical=False))
 parser.add_argument("-m", "--metrics", help = "Select metrics: 1 = SSIMU2, 2 = XPSNR, 3 = Both | Default: 1", default=1)
 parser.add_argument("-S", "--skip", help = "SSIMU2 skip value, every nth frame's SSIMU2 is calculated | Default: 1 for turbo-metrics, 3 for vs-zip")
@@ -123,12 +123,12 @@ def fast_pass(
         '-i', input_file,
         '--temp', tmp_dir,
         '-y',
-	'--verbose',
+	    '--verbose',
         '--keep',
         '-m', 'lsmash',
         '-c', 'mkvmerge',
         '--min-scene-len', '24',
-	'--sc-downscale-height', '720',
+	    '--sc-downscale-height', '720',
         '--set-thread-affinity', '2',
         '-e', 'svt-av1',
         '--force',
@@ -140,8 +140,8 @@ def fast_pass(
     try:
         subprocess.run(fast_av1an_command, text=True, check=True)
     except subprocess.CalledProcessError as e:
-       print(f"Av1an encountered an error:\n{e}")
-       exit(1)
+        print(f"Av1an encountered an error:\n{e}")
+        exit(1)
 
 def turbo_metrics(
     source: str, distorted: str, every: int
@@ -236,8 +236,8 @@ def calculate_ssimu2(src_file, enc_file, ssimu2_txt_path, ranges, skip):
             else:
                 cut_source_clip = source_clip #[ranges[i]:ranges[i+1]]
                 cut_encoded_clip = encoded_clip #[ranges[i]:ranges[i+1]]
-	    if vship:
-		result = core.vszip.Metrics(cut_source_clip, cut_encoded_clip, mode=0)
+	    if not vship:
+		    result = core.vszip.Metrics(cut_source_clip, cut_encoded_clip, mode=0)
 	    else:
 	    	result = core.vship.SSIMULACRA2(cut_source_clip, cut_encoded_clip)
             for index, frame in enumerate(result.frames()):
