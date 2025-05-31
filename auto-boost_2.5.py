@@ -33,10 +33,10 @@ if shutil.which("av1an") is None:
 
 if shutil.which("turbo-metrics") is None:
     print("turbo-metrics not found, defaulting to vs-zip")
-    ssimu2zig = True
+    ssimu2cpu = True
     default_skip = 3
 else:
-    ssimu2zig = False
+    ssimu2cpu = False
     default_skip = 1
 
 parser = argparse.ArgumentParser()
@@ -47,12 +47,13 @@ parser.add_argument("-q", "--quality", help = "Base quality (CRF) | Default: 30"
 parser.add_argument("-d", "--deviation", help = "Base deviation limit for CRF changes (used if max_positive_dev or max_negative_dev not set) | Default: 10", default=10)
 parser.add_argument("--max-positive-dev", help = "Maximum allowed positive CRF deviation | Default: None", type=float, default=None)
 parser.add_argument("--max-negative-dev", help = "Maximum allowed negative CRF deviation | Default: None", type=float, default=None)
-parser.add_argument("-p", "--preset", help = "Fast encode preset | Default: 9", default=9)
+parser.add_argument("-p", "--preset", help = "Fast encode preset | Default: 8", default=8)
 parser.add_argument("-w", "--workers", help = "Number of av1an workers | Default: amount of physical cores", default=psutil.cpu_count(logical=False))
 parser.add_argument("-m", "--metrics", help = "Select metrics: 1 = SSIMU2, 2 = XPSNR, 3 = Both | Default: 1", default=1)
 parser.add_argument("-S", "--skip", help = "SSIMU2 skip value, every nth frame's SSIMU2 is calculated | Default: 1 for turbo-metrics, 3 for vs-zip")
 parser.add_argument("-z", "--zones", help = "Zones calculation method: 1 = SSIMU2, 2 = XPSNR, 3 = Multiplication, 4 = Lowest Result | Default: 1", default=1)
 parser.add_argument("-a", "--aggressive", action='store_true', help = "More aggressive boosting | Default: not active")
+parser.add_argument("-h", "--vship", action='store_true', help = "Leverage Vship (GPU) instead of vs-zip (CPU) | Default: not active")
 parser.add_argument("-v","--video_params", help="Custom encoder parameters for av1an")
 args = parser.parse_args()
 stage = int(args.stage)
@@ -61,9 +62,18 @@ output_dir = src_file.parent
 tmp_dir = Path(args.temp).resolve() if args.temp is not None else output_dir / src_file.stem
 output_file = output_dir / f"{src_file.stem}_fastpass.mkv"
 scenes_file = tmp_dir / "scenes.json"
-br = float(args.deviation)
+ranges = get_ranges(scenes_file)
+crf = float(args.quality)
+base_deviation = float(args.deviation)
+max_pos_dev = args.max_positive_dev
+max_neg_dev = args.max_negative_dev
+preset = args.preset
+workers = args.workers
+metrics = int(args.metrics)
 skip = int(args.skip) if args.skip is not None else default_skip
+zones = int(args.zones)
 aggressive = args.aggressive
+vship = args.vship
 video_params = args.video_params
 
 def get_ranges(scenes: str) -> list[int]:
@@ -172,7 +182,7 @@ def turbo_metrics(
     )
 
 def calculate_ssimu2(src_file, enc_file, ssimu2_txt_path, ranges, skip):
-    if not ssimu2zig:  # Try turbo-metrics first if ssimu2zig is False
+    if not ssimu2cpu:  # Try turbo-metrics first if ssimu2cpu is False
         turbo_metrics_run = turbo_metrics(src_file, enc_file, skip)
         if turbo_metrics_run.returncode == 0:  # If turbo-metrics succeeds
             with ssimu2_txt_path.open("w") as file:
@@ -199,9 +209,9 @@ def calculate_ssimu2(src_file, enc_file, ssimu2_txt_path, ranges, skip):
             print(turbo_metrics_run.stdout)
             print(turbo_metrics_run.stderr)
             print("Falling back to vs-zip")
-            skip = int(args.skip) if args.skip is not None else 3
+            skip = skip if skip is not None else 3
 
-    # If ssimu2zig is True or turbo-metrics failed, use vs-zip
+    # If ssimu2cpu is True or turbo-metrics failed, use vs-zip
     is_vpy = os.path.splitext(os.path.basename(src_file))[1] == ".vpy"
     vpy_vars = {}
     if is_vpy:
@@ -219,20 +229,24 @@ def calculate_ssimu2(src_file, enc_file, ssimu2_txt_path, ranges, skip):
         file.write(f"skip: {skip}\n")
     iter = 0
     with tqdm(total=floor(len(source_clip)), desc=f'Calculating SSIMULACRA 2 scores') as pbar:
-        for i in range(len(ranges) - 1):
+        #for i in range(len(ranges) - 1):
             if skip > 1:
-                cut_source_clip = source_clip[ranges[i]:ranges[i+1]].std.SelectEvery(cycle=skip, offsets=1)
-                cut_encoded_clip = encoded_clip[ranges[i]:ranges[i+1]].std.SelectEvery(cycle=skip, offsets=1)
+                cut_source_clip = source_clip.std.SelectEvery(cycle=skip, offsets=1)
+                cut_encoded_clip = encoded_clip.std.SelectEvery(cycle=skip, offsets=1)
             else:
-                cut_source_clip = source_clip[ranges[i]:ranges[i+1]]
-                cut_encoded_clip = encoded_clip[ranges[i]:ranges[i+1]]
-            result = core.vszip.Metrics(cut_source_clip, cut_encoded_clip, mode=0)
+                cut_source_clip = source_clip #[ranges[i]:ranges[i+1]]
+                cut_encoded_clip = encoded_clip #[ranges[i]:ranges[i+1]]
+	    if not vship:
+		result = core.vszip.Metrics(cut_source_clip, cut_encoded_clip, mode=0)
+	    else:
+	    	result = core.vship.SSIMULACRA2(cut_source_clip, cut_encoded_clip)
             for index, frame in enumerate(result.frames()):
                 iter += 1
                 score = frame.props['_SSIMULACRA2']
                 with ssimu2_txt_path.open("a") as file:
                     file.write(f"{iter}: {score}\n")
                 pbar.update(skip)
+		    
 def calculate_xpsnr(src_file, enc_path, xpsnr_txt_path):
     if IS_WINDOWS:
         xpsnr_txt_path = f"{src_file.stem}_xpsnr.log"
@@ -335,10 +349,6 @@ def generate_zones(ranges: list, percentile_5_total: list, average: int, crf: fl
     :type video_prams: str    
     """
     zones_iter = 0
-    # Determine effective deviation limits
-    base_deviation = float(args.deviation)
-    max_pos_dev = args.max_positive_dev
-    max_neg_dev = args.max_negative_dev
     
     # If neither max deviation is set, use base deviation for both
     if max_pos_dev is None and max_neg_dev is None:
@@ -354,7 +364,7 @@ def generate_zones(ranges: list, percentile_5_total: list, average: int, crf: fl
         zones_iter += 1
         
         # Calculate CRF adjustment using aggressive or normal multiplier
-        multiplier = 40 if args.aggressive else 20
+        multiplier = 40 if aggressive else 20
         adjustment = ceil((1.0 - (percentile_5_total[i] / average)) * multiplier * 4) / 4
         new_crf = crf - adjustment
 
@@ -529,29 +539,14 @@ def calculate_zones(tmp_dir, ranges, zones, cq, video_params):
 
 match stage:
     case 0:
-        workers = args.workers
-        crf = float(args.quality)
-        preset = args.preset
-        video_params = args.video_params
         fast_pass(src_file, output_file, tmp_dir, preset, crf, workers, video_params)
-        ranges = get_ranges(scenes_file)
-        metrics = int(args.metrics)
         calculate_metrics(src_file, output_file, tmp_dir, ranges, skip, metrics)
-        zones = int(args.zones)
         calculate_zones(tmp_dir, ranges, zones, crf, video_params)
     case 1:
-        workers = args.workers
-        crf = float(args.quality)
-        preset = args.preset
         fast_pass(src_file, output_file, tmp_dir, preset, crf, workers, video_params)
     case 2:
-        ranges = get_ranges(scenes_file)
-        metrics = int(args.metrics)
         calculate_metrics(src_file, output_file, tmp_dir, ranges, skip, metrics)
     case 3:
-        ranges = get_ranges(scenes_file)
-        zones = int(args.zones)
-        crf = float(args.quality)
         calculate_zones(tmp_dir, ranges, zones, crf, video_params)
     case _:
         print(f"Stage argument invalid, exiting.")
