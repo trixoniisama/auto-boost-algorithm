@@ -1,31 +1,24 @@
 # Auto-boost Algorithm
 
-## Version 1.0: brightness-based
+## Auto-Boost-Next:
 
-> Gets the average brightness of a scene and lowers CQ/CRF/Q the darker the scene is, in a _zones.txt_ file to feed Av1an.
-The requirements are Vapoursynth, vstools and LSMASHSource.
+_Soon:tm:_
 
-__Usage:__
-```
-python auto-boost_1.0.py "{animu.mkv}" "{scenes.json}" {base CQ/CRF/Q} "{encoder: aom/svt-av1/rav1e (optional)}"
-```
+## Version 2.5: SSIMULACRA2&XPSNR-based
 
-__Example:__
-```
-python auto-boost_1.0.py "path/to/nice_boat.mkv" "path/to/scenes.json" 30
-```
+The requirements are Vapoursynth, LSMASHSource, Av1an, vszip and a few python library libraries. Optionally: ffmpeg built with XPSNR support, turbo-metrics.
 
-__Advantages:__
-- Fast
-- No bs
-- Solves one long-lasting issue of AV1 encoders: low bitrate allocation in dark scenes
+Refined 2.0 with the following additions & changes:
+- Proper argument parsing, more control over the script
+- Separated the fast encode, metric calculation and zone creation into three independant, callable stages
+- Replaced the deprecated `vapoursynth-ssimulacra2` by `vszip`
+- Added `turbo-metrics` for GPU-accelerated metrics measurement (Nvidia only)
+- Added XPSNR metric and a few zones calculation methods
+- Taking advantage of SVT-AV1-PSY quarter-step CRF feature for more granular control
+- Possibility to use a more aggressive boosting curve
+- And a few other smaller changes...
 
-__Known limitations:__
-- Not every dark scene is made equal, brightness is not a great enough metric to determine whether CRF should be decreased or not
-- CRF is boosted to the max during credits
-- Script now entirely irrelevant with SVT-AV1-PSY's new frame-luma-bias feature
-
-_Inspiration was drawn from the original Av1an (python) boosting code_
+_Many thanks to R1chterScale, Yiss and Kosaka for iterating on auto-boost and making these amazing contributions!_
 
 ## Version 2.0: SSIMULACRA2-based
 
@@ -53,24 +46,29 @@ __Known limitations:__
 
 _Borrowed some code from Sav1or's SSIMULACRA2 script_
 
-## Version 2.5: SSIMULACRA2&XPSNR-based
+## Version 1.0: brightness-based
 
-The requirements are Vapoursynth, LSMASHSource, Av1an, vszip and a few python library libraries. Optionally: ffmpeg built with XPSNR support, turbo-metrics.
+> Gets the average brightness of a scene and lowers CQ/CRF/Q the darker the scene is, in a _zones.txt_ file to feed Av1an.
+The requirements are Vapoursynth, vstools and LSMASHSource.
 
-Refined 2.0 with the following additions & changes:
-- Proper argument parsing, more control over the script
-- Separated the fast encode, metric calculation and zone creation into three independant, callable stages
-- Replaced the deprecated `vapoursynth-ssimulacra2` by `vszip`
-- Added `turbo-metrics` for GPU-accelerated metrics measurement (Nvidia only)
-- Added XPSNR metric and a few zones calculation methods
-- Taking advantage of SVT-AV1-PSY quarter-step CRF feature for more granular control
-- Possibility to use a more aggressive boosting curve
-- And a few other smaller changes...
+__Usage:__
+```
+python auto-boost_1.0.py "{animu.mkv}" "{scenes.json}" {base CQ/CRF/Q} "{encoder: aom/svt-av1/rav1e (optional)}"
+```
 
-_Many thanks to R1chterScale, Yiss and Kosaka for iterating on auto-boost and making these amazing contributions!_
+__Example:__
+```
+python auto-boost_1.0.py "path/to/nice_boat.mkv" "path/to/scenes.json" 30
+```
 
-## Version 3.0: SSIMULACRA2-based + per-scene grain synthesis strength determination
+__Advantages:__
+- Fast
+- No bs
+- Solves one long-lasting issue of AV1 encoders: low bitrate allocation in dark scenes
 
-...and a few other improvements.
+__Known limitations:__
+- Not every dark scene is made equal, brightness is not a great enough metric to determine whether CRF should be decreased or not
+- CRF is boosted to the max during credits
+- Script now entirely irrelevant with SVT-AV1-PSY's new frame-luma-bias feature
 
-_Soon:tm:_
+_Inspiration was drawn from the original Av1an (python) boosting code_
