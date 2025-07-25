@@ -39,6 +39,23 @@ else:
     ssimu2cpu = False
     default_skip = 1
 
+def get_ranges(scenes: str) -> list[int]:
+    """
+    Reads a scene file and returns a list of frame numbers for each scene change.
+
+    :param scenes: path to scene file
+    :type scenes: str
+
+    :return: list of frame numbers
+    :rtype: list[int]
+    """
+    ranges = [0]
+    with scenes.open("r") as file:
+        content = json.load(file)
+        for scene in content['scenes']:
+            ranges.append(scene['end_frame'])
+    return ranges
+
 parser = argparse.ArgumentParser()
 parser.add_argument("-s", "--stage", help = "Select stage: 1 = encode, 2 = calculate metrics, 3 = generate zones | Default: all", default=0)
 parser.add_argument("-i", "--input", required=True, help = "Video input filepath (original source file)")
@@ -53,7 +70,7 @@ parser.add_argument("-m", "--metrics", help = "Select metrics: 1 = SSIMU2, 2 = X
 parser.add_argument("-S", "--skip", help = "SSIMU2 skip value, every nth frame's SSIMU2 is calculated | Default: 1 for turbo-metrics, 3 for vs-zip")
 parser.add_argument("-z", "--zones", help = "Zones calculation method: 1 = SSIMU2, 2 = XPSNR, 3 = Multiplication, 4 = Lowest Result | Default: 1", default=1)
 parser.add_argument("-a", "--aggressive", action='store_true', help = "More aggressive boosting | Default: not active")
-parser.add_argument("-h", "--vship", action='store_true', help = "Leverage Vship (GPU) instead of vs-zip (CPU) | Default: not active")
+parser.add_argument("-gpu", "--vship", action='store_true', help = "Leverage Vship (GPU) instead of vs-zip (CPU) | Default: not active")
 parser.add_argument("-v","--video_params", help="Custom encoder parameters for av1an")
 args = parser.parse_args()
 stage = int(args.stage)
@@ -75,23 +92,6 @@ zones = int(args.zones)
 aggressive = args.aggressive
 vship = args.vship
 video_params = args.video_params
-
-def get_ranges(scenes: str) -> list[int]:
-    """
-    Reads a scene file and returns a list of frame numbers for each scene change.
-
-    :param scenes: path to scene file
-    :type scenes: str
-
-    :return: list of frame numbers
-    :rtype: list[int]
-    """
-    ranges = [0]
-    with scenes.open("r") as file:
-        content = json.load(file)
-        for scene in content['scenes']:
-            ranges.append(scene['end_frame'])
-    return ranges
 
 def fast_pass(
         input_file: str, output_file: str, tmp_dir: str, preset: int, crf: float, workers: int,video_params: str
@@ -123,12 +123,12 @@ def fast_pass(
         '-i', input_file,
         '--temp', tmp_dir,
         '-y',
-	'--verbose',
+        '--verbose',
         '--keep',
         '-m', 'lsmash',
         '-c', 'mkvmerge',
         '--min-scene-len', '24',
-	'--sc-downscale-height', '720',
+        '--sc-downscale-height', '720',
         '--set-thread-affinity', '2',
         '-e', 'svt-av1',
         '--force',
@@ -236,17 +236,17 @@ def calculate_ssimu2(src_file, enc_file, ssimu2_txt_path, ranges, skip):
             else:
                 cut_source_clip = source_clip #[ranges[i]:ranges[i+1]]
                 cut_encoded_clip = encoded_clip #[ranges[i]:ranges[i+1]]
-	    if not vship:
-		result = core.vszip.Metrics(cut_source_clip, cut_encoded_clip, mode=0)
-	    else:
-	    	result = core.vship.SSIMULACRA2(cut_source_clip, cut_encoded_clip)
+            if not vship:
+                result = core.vszip.Metrics(cut_source_clip, cut_encoded_clip, mode=0)
+            else:
+                result = core.vship.SSIMULACRA2(cut_source_clip, cut_encoded_clip)
             for index, frame in enumerate(result.frames()):
                 iter += 1
                 score = frame.props['_SSIMULACRA2']
                 with ssimu2_txt_path.open("a") as file:
                     file.write(f"{iter}: {score}\n")
                 pbar.update(skip)
-		    
+
 def calculate_xpsnr(src_file, enc_path, xpsnr_txt_path):
     if IS_WINDOWS:
         xpsnr_txt_path = f"{src_file.stem}_xpsnr.log"
@@ -328,7 +328,7 @@ def calculate_std_dev(score_list: list[int]):
     percentile_95 = sorted_score_list[int (len(filtered_score_list)//(20/19))]
     return (average, percentile_5, percentile_95)
 
-def generate_zones(ranges: list, percentile_5_total: list, average: int, crf: float, zones_txt_path: str, video_params: str):
+def generate_zones(ranges: list, percentile_5_total: list, average: int, crf: float, zones_txt_path: str, video_params: str, max_pos_dev: float | None, max_neg_dev: float | None, base_deviation: float):
     """
     Appends a scene change to the ``zones_txt_path`` file in Av1an zones format.
 
@@ -406,7 +406,7 @@ def calculate_metrics(src_file, output_file, tmp_dir, ranges, skip, metrics):
             calculate_xpsnr(src_file, output_file, xpsnr_txt_path)
             calculate_ssimu2(src_file, output_file, ssimu2_txt_path, ranges, skip)
 
-def calculate_zones(tmp_dir, ranges, zones, cq, video_params):
+def calculate_zones(tmp_dir, ranges, zones, cq, video_params, max_pos_dev, max_neg_dev, base_deviation):
     match zones:
         case 1:
             ssimu2_txt_path = output_dir / f"{src_file.stem}_ssimu2.log"
@@ -434,7 +434,7 @@ def calculate_zones(tmp_dir, ranges, zones, cq, video_params):
             print(f'Median score:  {ssimu2_average}')
             print(f'5th Percentile:  {ssimu2_percentile_5}')
             print(f'95th Percentile:  {ssimu2_percentile_95}\n')
-            generate_zones(ranges, ssimu2_percentile_5_total, ssimu2_average, cq, ssimu2_zones_txt_path, video_params)
+            generate_zones(ranges, ssimu2_percentile_5_total, ssimu2_average, cq, ssimu2_zones_txt_path, video_params, max_pos_dev, max_neg_dev, base_deviation)
 
         case 2:
             xpsnr_txt_path = output_dir / f"{src_file.stem}_xpsnr.log"
@@ -460,7 +460,7 @@ def calculate_zones(tmp_dir, ranges, zones, cq, video_params):
             print(f'Median score:  {xpsnr_average}')
             print(f'5th Percentile:  {xpsnr_percentile_5}')
             print(f'95th Percentile:  {xpsnr_percentile_95}\n')
-            generate_zones(ranges, xpsnr_percentile_5_total, xpsnr_average, cq, xpsnr_zones_txt_path, video_params)
+            generate_zones(ranges, xpsnr_percentile_5_total, xpsnr_average, cq, xpsnr_zones_txt_path, video_params, max_pos_dev, max_neg_dev, base_deviation)
 
         case 3:
             ssimu2_txt_path = output_dir / f"{src_file.stem}_ssimu2.log"
@@ -494,7 +494,7 @@ def calculate_zones(tmp_dir, ranges, zones, cq, video_params):
             print(f'Median score:  {multiplied_average}')
             print(f'5th Percentile:  {multiplied_percentile_5}')
             print(f'95th Percentile:  {multiplied_percentile_95}\n')
-            generate_zones(ranges, multiplied_percentile_5_total, multiplied_average, cq, multiplied_zones_txt_path, video_params)
+            generate_zones(ranges, multiplied_percentile_5_total, multiplied_average, cq, multiplied_zones_txt_path, video_params, max_pos_dev, max_neg_dev, base_deviation)
 
 
         case 4:
@@ -535,19 +535,19 @@ def calculate_zones(tmp_dir, ranges, zones, cq, video_params):
             print(f'Median score:  {minimum_average}')
             print(f'5th Percentile:  {minimum_percentile_5}')
             print(f'95th Percentile:  {minimum_percentile_95}\n')
-            generate_zones(ranges, minimum_percentile_5_total, minimum_average, cq, minimum_zones_txt_path, video_params)
+            generate_zones(ranges, minimum_percentile_5_total, minimum_average, cq, minimum_zones_txt_path, video_params, max_pos_dev, max_neg_dev, base_deviation)
 
 match stage:
     case 0:
         fast_pass(src_file, output_file, tmp_dir, preset, crf, workers, video_params)
         calculate_metrics(src_file, output_file, tmp_dir, ranges, skip, metrics)
-        calculate_zones(tmp_dir, ranges, zones, crf, video_params)
+        calculate_zones(tmp_dir, ranges, zones, crf, video_params, max_pos_dev, max_neg_dev, base_deviation)
     case 1:
         fast_pass(src_file, output_file, tmp_dir, preset, crf, workers, video_params)
     case 2:
         calculate_metrics(src_file, output_file, tmp_dir, ranges, skip, metrics)
     case 3:
-        calculate_zones(tmp_dir, ranges, zones, crf, video_params)
+        calculate_zones(tmp_dir, ranges, zones, crf, video_params, max_pos_dev, max_neg_dev, base_deviation)
     case _:
         print(f"Stage argument invalid, exiting.")
         exit(-2)
