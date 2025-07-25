@@ -79,7 +79,7 @@ output_dir = src_file.parent
 tmp_dir = Path(args.temp).resolve() if args.temp is not None else output_dir / src_file.stem
 output_file = output_dir / f"{src_file.stem}_fastpass.mkv"
 scenes_file = tmp_dir / "scenes.json"
-ranges = get_ranges(scenes_file)
+ranges = []
 crf = float(args.quality)
 base_deviation = float(args.deviation)
 max_pos_dev = args.max_positive_dev
@@ -128,6 +128,7 @@ def fast_pass(
         '-m', 'lsmash',
         '-c', 'mkvmerge',
         '--min-scene-len', '24',
+        '--scenes', scenes_file,
         '--sc-downscale-height', '720',
         '--set-thread-affinity', '2',
         '-e', 'svt-av1',
@@ -346,7 +347,7 @@ def generate_zones(ranges: list, percentile_5_total: list, average: int, crf: fl
     :param zones_txt_path: Path to the zones.txt file
     :type zones_txt_path: str
     :param video_params: custom encoder params for av1an
-    :type video_prams: str    
+    :type video_prams: str
     """
     zones_iter = 0
     
@@ -540,6 +541,7 @@ def calculate_zones(tmp_dir, ranges, zones, cq, video_params, max_pos_dev, max_n
 match stage:
     case 0:
         fast_pass(src_file, output_file, tmp_dir, preset, crf, workers, video_params)
+        ranges = get_ranges(scenes_file)
         calculate_metrics(src_file, output_file, tmp_dir, ranges, skip, metrics)
         calculate_zones(tmp_dir, ranges, zones, crf, video_params, max_pos_dev, max_neg_dev, base_deviation)
     case 1:
@@ -547,6 +549,7 @@ match stage:
     case 2:
         calculate_metrics(src_file, output_file, tmp_dir, ranges, skip, metrics)
     case 3:
+        ranges = get_ranges(scenes_file)
         calculate_zones(tmp_dir, ranges, zones, crf, video_params, max_pos_dev, max_neg_dev, base_deviation)
     case _:
         print(f"Stage argument invalid, exiting.")
