@@ -12,16 +12,18 @@
 
 from math import ceil, floor
 from pathlib import Path
-from tqdm import tqdm
 import json
 import os
 import subprocess
 import re
 import argparse
-import psutil
 import shutil
 import platform
+
+from tqdm import tqdm
+import psutil
 import vapoursynth as vs
+
 core = vs.core
 core.max_cache_size = 1024
 
@@ -66,32 +68,37 @@ parser.add_argument("--max-positive-dev", help = "Maximum allowed positive CRF d
 parser.add_argument("--max-negative-dev", help = "Maximum allowed negative CRF deviation | Default: None", type=float, default=None)
 parser.add_argument("-p", "--preset", help = "Fast encode preset | Default: 8", default=8)
 parser.add_argument("-w", "--workers", help = "Number of av1an workers | Default: amount of physical cores", default=psutil.cpu_count(logical=False))
-parser.add_argument("-m", "--metrics", help = "Select metrics: 1 = SSIMU2, 2 = XPSNR, 3 = Both | Default: 1", default=1)
 parser.add_argument("-S", "--skip", help = "SSIMU2 skip value, every nth frame's SSIMU2 is calculated | Default: 1 for turbo-metrics, 3 for vs-zip")
-parser.add_argument("-z", "--zones", help = "Zones calculation method: 1 = SSIMU2, 2 = XPSNR, 3 = Multiplication, 4 = Lowest Result | Default: 1", default=1)
+parser.add_argument("-m", "--method", help = "Zones calculation method: 1 = SSIMU2, 2 = XPSNR, 3 = Multiplication, 4 = Lowest Result | Default: 1", default=1)
 parser.add_argument("-a", "--aggressive", action='store_true', help = "More aggressive boosting | Default: not active")
 parser.add_argument("-gpu", "--vship", action='store_true', help = "Leverage Vship (GPU) instead of vs-zip (CPU) | Default: not active")
 parser.add_argument("-v","--video_params", help="Custom encoder parameters for av1an")
 args = parser.parse_args()
-stage = int(args.stage)
+ranges = []
+
 src_file = Path(args.input).resolve()
 output_dir = src_file.parent
 tmp_dir = Path(args.temp).resolve() if args.temp is not None else output_dir / src_file.stem
 output_file = output_dir / f"{src_file.stem}_fastpass.mkv"
 scenes_file = tmp_dir / "scenes.json"
-ranges = []
-crf = float(args.quality)
+
+# Computation Parameters
+stage = int(args.stage)
+method = int(args.method)
+
 base_deviation = float(args.deviation)
 max_pos_dev = args.max_positive_dev
 max_neg_dev = args.max_negative_dev
+aggressive = args.aggressive
+skip = int(args.skip) if args.skip is not None else default_skip
+vship = args.vship
+
+# Encoding Parameters
+crf = float(args.quality)
 preset = args.preset
 workers = args.workers
-metrics = int(args.metrics)
-skip = int(args.skip) if args.skip is not None else default_skip
-zones = int(args.zones)
-aggressive = args.aggressive
-vship = args.vship
 video_params = args.video_params
+
 
 def fast_pass(
         input_file: str, output_file: str, tmp_dir: str, preset: int, crf: float, workers: int,video_params: str
@@ -229,7 +236,7 @@ def calculate_ssimu2(src_file, enc_file, ssimu2_txt_path, ranges, skip):
     with ssimu2_txt_path.open("w") as file:
         file.write(f"skip: {skip}\n")
     iter = 0
-    with tqdm(total=floor(len(source_clip)), desc=f'Calculating SSIMULACRA 2 scores') as pbar:
+    with tqdm(total=floor(len(source_clip)), desc=f'Calculating SSIMULACRA 2 scores', unit=" frames") as pbar:
         #for i in range(len(ranges) - 1):
             if skip > 1:
                 cut_source_clip = source_clip.std.SelectEvery(cycle=skip, offsets=1)
@@ -270,7 +277,7 @@ def calculate_xpsnr(src_file, enc_path, xpsnr_txt_path):
 
 def get_xpsnr(xpsnr_txt_path):
     count=0
-
+    skip = 1
     sum_weighted = 0
     values_weighted: list[int] = []
 
@@ -292,7 +299,7 @@ def get_xpsnr(xpsnr_txt_path):
         avg_weighted = sum_weighted / count
         for i in range(len(values_weighted)):
             values_weighted[i] /= avg_weighted
-    return values_weighted
+    return values_weighted, skip
 
 def get_ssimu2(ssimu2_txt_path):
     ssimu2_scores: list[int] = []
@@ -393,164 +400,117 @@ def generate_zones(ranges: list, percentile_5_total: list, average: int, crf: fl
         with zones_txt_path.open("w" if zones_iter == 1 else "a") as file:
             file.write(f"{ranges[i]} {ranges[i+1]} svt-av1 {zone_params}\n")
 
-def calculate_metrics(src_file, output_file, tmp_dir, ranges, skip, metrics):
-    match metrics:
+def calculate_metrics(src_file, output_file, tmp_dir, ranges, skip, method):
+    match method:
         case 1:
             ssimu2_txt_path = output_dir / f"{src_file.stem}_ssimu2.log"
             calculate_ssimu2(src_file, output_file, ssimu2_txt_path, ranges, skip)
         case 2:
             xpsnr_txt_path = output_dir / f"{src_file.stem}_xpsnr.log"
             calculate_xpsnr(src_file, output_file, xpsnr_txt_path)
-        case 3:
+        case 3 | 4:
             xpsnr_txt_path = output_dir / f"{src_file.stem}_xpsnr.log"
             ssimu2_txt_path = output_dir / f"{src_file.stem}_ssimu2.log"
             calculate_xpsnr(src_file, output_file, xpsnr_txt_path)
             calculate_ssimu2(src_file, output_file, ssimu2_txt_path, ranges, skip)
 
-def calculate_zones(tmp_dir, ranges, zones, cq, video_params, max_pos_dev, max_neg_dev, base_deviation):
-    match zones:
-        case 1:
+def calculate_zones(tmp_dir, ranges, method, cq, video_params, max_pos_dev, max_neg_dev, base_deviation):
+    match method:
+        case 1 | 2:
+            if method == 1:
+                metric = 'ssimu2'
+                metric_txt_path = output_dir / f'{src_file.stem}_{metric}.log'
+                metric_scores, skip = get_ssimu2(metric_txt_path)
+            else:
+                metric = 'xpsnr'
+                metric_txt_path = output_dir / f'{src_file.stem}_{metric}.log'
+                metric_scores, skip = get_xpsnr(metric_txt_path)
+
+            metric_zones_txt_path = tmp_dir / f'{metric}_zones.txt'
+            metric_total_scores = []
+            metric_percentile_5_total = []
+            metric_iter = 0
+
+            for i in range(len(ranges) - 1):
+                metric_chunk_scores = []
+                metric_frames = (ranges[i + 1] - ranges[i]) // skip
+                for frames in range(metric_frames):
+                    metric_score = metric_scores[metric_iter]
+                    metric_chunk_scores.append(metric_score)
+                    metric_total_scores.append(metric_score)
+                    metric_iter += 1
+                metric_average, metric_percentile_5, metric_percentile_95 = calculate_std_dev(metric_chunk_scores)
+                metric_percentile_5_total.append(metric_percentile_5)
+            metric_average, metric_percentile_5, metric_percentile_95 = calculate_std_dev(metric_total_scores)
+
+            print(f'{metric}')
+            print(f'Median score: {metric_average}')
+            print(f'5th Percentile: {metric_percentile_5}')
+            print(f'95th Percentile: {metric_percentile_95}')
+            generate_zones(ranges, metric_percentile_5_total, metric_average, cq, metric_zones_txt_path, video_params, max_pos_dev, max_neg_dev, base_deviation)
+
+        case 3 | 4:
+            if method == 3:
+                method = 'multiplied'
+            else:
+                method = 'minimum'
+
             ssimu2_txt_path = output_dir / f"{src_file.stem}_ssimu2.log"
-            (ssimu2_scores, skip) = get_ssimu2(ssimu2_txt_path)
-            ssimu2_zones_txt_path = tmp_dir / "ssimu2_zones.txt"
-            ssimu2_total_scores: list[int] = []
-            ssimu2_percentile_5_total = []
-            ssimu2_iter = 0
-
-            for i in range(len(ranges)-1):
-                ssimu2_chunk_scores: list[int] = []
-                xpsnr_chunk_scores: list[int] = []
-                ssimu2_frames = (ranges[i+1] - ranges[i]) // skip
-                for frames in range(ssimu2_frames):
-                    ssimu2_score = ssimu2_scores[ssimu2_iter]
-                    ssimu2_chunk_scores.append(ssimu2_score)
-                    ssimu2_total_scores.append(ssimu2_score)
-                    ssimu2_iter += 1
-                (ssimu2_average, ssimu2_percentile_5, ssimu2_percentile_95) = calculate_std_dev(ssimu2_chunk_scores)
-                ssimu2_percentile_5_total.append(ssimu2_percentile_5)
-                #print(f'5th Percentile:  {ssimu2_percentile_5}')
-            (ssimu2_average, ssimu2_percentile_5, ssimu2_percentile_95) = calculate_std_dev(ssimu2_total_scores)
-
-            print(f'SSIMU2:')
-            print(f'Median score:  {ssimu2_average}')
-            print(f'5th Percentile:  {ssimu2_percentile_5}')
-            print(f'95th Percentile:  {ssimu2_percentile_95}\n')
-            generate_zones(ranges, ssimu2_percentile_5_total, ssimu2_average, cq, ssimu2_zones_txt_path, video_params, max_pos_dev, max_neg_dev, base_deviation)
-
-        case 2:
+            ssimu2_scores, skip = get_ssimu2(ssimu2_txt_path)
             xpsnr_txt_path = output_dir / f"{src_file.stem}_xpsnr.log"
-            xpsnr_scores: list[int] = get_xpsnr(xpsnr_txt_path)
-            xpsnr_zones_txt_path = tmp_dir / "xpsnr_zones.txt"
-            xpsnr_total_scores: list[int] = []
-            xpsnr_percentile_5_total = []
-            xpsnr_iter = 0
+            xpsnr_scores, _ = get_xpsnr(xpsnr_txt_path)
 
+            calculation_zones_txt_path = tmp_dir / f"{method}_zones.txt"
+            calculation_total_scores: list[int] = []
+            calculation_percentile_5_total = []
+            calculation_iter = 0
+            if method == 'minimum': ssimu2_average, ssimu2_percentile_5, ssimu2_percentile_95 = calculate_std_dev(ssimu2_scores)
             for i in range(len(ranges)-1):
-                xpsnr_chunk_scores: list[int] = []
-                xpsnr_frames = (ranges[i+1] - ranges[i])
-                for frames in range(xpsnr_frames):
-                    xpsnr_score = xpsnr_scores[xpsnr_iter]
-                    xpsnr_chunk_scores.append(xpsnr_score)
-                    xpsnr_total_scores.append(xpsnr_score)
-                    xpsnr_iter += 1
-                (xpsnr_average, xpsnr_percentile_5, xpsnr_percentile_95) = calculate_std_dev(xpsnr_chunk_scores)
-                xpsnr_percentile_5_total.append(xpsnr_percentile_5)
-            (xpsnr_average, xpsnr_percentile_5, xpsnr_percentile_95) = calculate_std_dev(xpsnr_total_scores)
-
-            print(f'XPSNR:')
-            print(f'Median score:  {xpsnr_average}')
-            print(f'5th Percentile:  {xpsnr_percentile_5}')
-            print(f'95th Percentile:  {xpsnr_percentile_95}\n')
-            generate_zones(ranges, xpsnr_percentile_5_total, xpsnr_average, cq, xpsnr_zones_txt_path, video_params, max_pos_dev, max_neg_dev, base_deviation)
-
-        case 3:
-            ssimu2_txt_path = output_dir / f"{src_file.stem}_ssimu2.log"
-            (ssimu2_scores, skip) = get_ssimu2(ssimu2_txt_path)
-            xpsnr_txt_path = output_dir / f"{src_file.stem}_xpsnr.log"
-            xpsnr_scores: list[int] = get_xpsnr(xpsnr_txt_path)
-
-            multiplied_zones_txt_path = tmp_dir / "multiplied_zones.txt"
-            multiplied_total_scores: list[int] = []
-            multiplied_percentile_5_total = []
-            multiplied_iter = 0
-            for i in range(len(ranges)-1):
-                multiplied_chunk_scores: list[int] = []
-                ssimu2_frames = (ranges[i+1] - ranges[i]) // skip
+                calculation_chunk_scores: list[int] = []
+                ssimu2_frames = (ranges[i + 1] - ranges[i]) // skip
                 for frames in range(ssimu2_frames):
-                    ssimu2_score = ssimu2_scores[multiplied_iter]
-                    xpsnr_index = (skip*frames) + ranges[i] + 1
+                    ssimu2_score = ssimu2_scores[calculation_iter]
+                    xpsnr_index = (skip * frames) + ranges[i] + 1
                     xpsnr_scores_averaged = 0
                     for avg_index in range(skip):
                         xpsnr_scores_averaged += xpsnr_scores[xpsnr_index + avg_index - 1]
                     xpsnr_scores_averaged /= skip
-                    multiplied_score = xpsnr_scores_averaged * ssimu2_score
-                    multiplied_chunk_scores.append(multiplied_score)
-                    multiplied_total_scores.append(multiplied_score)
-                    multiplied_iter += 1
-                (multiplied_average, multiplied_percentile_5, multiplied_percentile_95) = calculate_std_dev(multiplied_chunk_scores)
-                multiplied_percentile_5_total.append(multiplied_percentile_5)
-            (multiplied_average, multiplied_percentile_5, multiplied_percentile_95) = calculate_std_dev(multiplied_total_scores)
+                    print(method)
+                    if method == 'multiplied':
+                        calculation_score = xpsnr_scores_averaged * ssimu2_score
+                    elif method == 'minimum':
+                        xpsnr_scores_averaged *= ssimu2_average
+                        calculation_score = min(ssimu2_score, xpsnr_scores_averaged)
 
-            print(f'Multiplied:')
-            print(f'Median score:  {multiplied_average}')
-            print(f'5th Percentile:  {multiplied_percentile_5}')
-            print(f'95th Percentile:  {multiplied_percentile_95}\n')
-            generate_zones(ranges, multiplied_percentile_5_total, multiplied_average, cq, multiplied_zones_txt_path, video_params, max_pos_dev, max_neg_dev, base_deviation)
-
-
-        case 4:
-            ssimu2_txt_path = output_dir / f"{src_file.stem}_ssimu2.log"
-            (ssimu2_scores, skip) = get_ssimu2(ssimu2_txt_path)
-            xpsnr_txt_path = output_dir / f"{src_file.stem}_xpsnr.log"
-            xpsnr_scores: list[int] = get_xpsnr(xpsnr_txt_path)
-
-            minimum_zones_txt_path = tmp_dir / "minimum_zones.txt"
-            minimum_total_scores: list[int] = []
-            minimum_percentile_5_total = []
-            minimum_iter = 0
-            ssimu2_total_scores: list[int] = []
-            for ssimu2_iter in range(len(ssimu2_scores)-1):
-                ssimu2_total_scores.append(ssimu2_scores[ssimu2_iter])
-            (ssimu2_average, ssimu2_percentile_5, ssimu2_percentile_95) = calculate_std_dev(ssimu2_total_scores)
-
-            for i in range(len(ranges)-1):
-                minimum_chunk_scores: list[int] = []
-                ssimu2_frames = (ranges[i+1] - ranges[i]) // skip
-                for frames in range(ssimu2_frames):
-                    ssimu2_score = ssimu2_scores[minimum_iter]
-                    xpsnr_index = (skip*frames) + ranges[i] + 1
-                    xpsnr_scores_averaged = 0
-                    for avg_index in range(skip):
-                        xpsnr_scores_averaged += xpsnr_scores[xpsnr_index + avg_index - 1]
-                    xpsnr_scores_averaged /= skip
-                    xpsnr_scores_averaged *= ssimu2_average
-                    minimum_score = min(ssimu2_score, xpsnr_scores_averaged)
-                    minimum_chunk_scores.append(minimum_score)
-                    minimum_total_scores.append(minimum_score)
-                    minimum_iter += 1
-                (minimum_average, minimum_percentile_5, minimum_percentile_95) = calculate_std_dev(minimum_chunk_scores)
-                minimum_percentile_5_total.append(minimum_percentile_5)
-            (minimum_average, minimum_percentile_5, minimum_percentile_95) = calculate_std_dev(minimum_total_scores)
+                    calculation_chunk_scores.append(calculation_score)
+                    calculation_total_scores.append(calculation_score)
+                    calculation_iter += 1
+                calculation_average, calculation_percentile_5, calculation_percentile_95 = calculate_std_dev(
+                    calculation_chunk_scores)
+                calculation_percentile_5_total.append(calculation_percentile_5)
+            calculation_average, calculation_percentile_5, calculation_percentile_95 = calculate_std_dev(
+                calculation_total_scores)
 
             print(f'Minimum:')
-            print(f'Median score:  {minimum_average}')
-            print(f'5th Percentile:  {minimum_percentile_5}')
-            print(f'95th Percentile:  {minimum_percentile_95}\n')
-            generate_zones(ranges, minimum_percentile_5_total, minimum_average, cq, minimum_zones_txt_path, video_params, max_pos_dev, max_neg_dev, base_deviation)
+            print(f'Median score:  {calculation_average}')
+            print(f'5th Percentile:  {calculation_percentile_5}')
+            print(f'95th Percentile:  {calculation_percentile_95}\n')
+            generate_zones(ranges, calculation_percentile_5_total, calculation_average, cq, calculation_zones_txt_path, video_params, max_pos_dev, max_neg_dev, base_deviation)
+
 
 match stage:
     case 0:
         fast_pass(src_file, output_file, tmp_dir, preset, crf, workers, video_params)
         ranges = get_ranges(scenes_file)
-        calculate_metrics(src_file, output_file, tmp_dir, ranges, skip, metrics)
-        calculate_zones(tmp_dir, ranges, zones, crf, video_params, max_pos_dev, max_neg_dev, base_deviation)
+        calculate_metrics(src_file, output_file, tmp_dir, ranges, skip, method)
+        calculate_zones(tmp_dir, ranges, method, crf, video_params, max_pos_dev, max_neg_dev, base_deviation)
     case 1:
         fast_pass(src_file, output_file, tmp_dir, preset, crf, workers, video_params)
     case 2:
-        calculate_metrics(src_file, output_file, tmp_dir, ranges, skip, metrics)
+        calculate_metrics(src_file, output_file, tmp_dir, ranges, skip, method)
     case 3:
         ranges = get_ranges(scenes_file)
-        calculate_zones(tmp_dir, ranges, zones, crf, video_params, max_pos_dev, max_neg_dev, base_deviation)
+        calculate_zones(tmp_dir, ranges, method, crf, video_params, max_pos_dev, max_neg_dev, base_deviation)
     case _:
         print(f"Stage argument invalid, exiting.")
         exit(-2)
