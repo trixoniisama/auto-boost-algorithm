@@ -79,7 +79,7 @@ ranges = []
 src_file = Path(args.input).resolve()
 output_dir = src_file.parent
 tmp_dir = Path(args.temp).resolve() if args.temp is not None else output_dir / src_file.stem
-output_file = output_dir / f"{src_file.stem}_fastpass.mkv"
+output_file = tmp_dir / f"{src_file.stem}_fastpass.mkv"
 scenes_file = tmp_dir / "scenes.json"
 
 # Computation Parameters
@@ -403,14 +403,14 @@ def generate_zones(ranges: list, percentile_5_total: list, average: int, crf: fl
 def calculate_metrics(src_file, output_file, tmp_dir, ranges, skip, method):
     match method:
         case 1:
-            ssimu2_txt_path = output_dir / f"{src_file.stem}_ssimu2.log"
+            ssimu2_txt_path = tmp_dir / f"{src_file.stem}_ssimu2.log"
             calculate_ssimu2(src_file, output_file, ssimu2_txt_path, ranges, skip)
         case 2:
-            xpsnr_txt_path = output_dir / f"{src_file.stem}_xpsnr.log"
+            xpsnr_txt_path = tmp_dir / f"{src_file.stem}_xpsnr.log"
             calculate_xpsnr(src_file, output_file, xpsnr_txt_path)
         case 3 | 4:
-            xpsnr_txt_path = output_dir / f"{src_file.stem}_xpsnr.log"
-            ssimu2_txt_path = output_dir / f"{src_file.stem}_ssimu2.log"
+            xpsnr_txt_path = tmp_dir / f"{src_file.stem}_xpsnr.log"
+            ssimu2_txt_path = tmp_dir / f"{src_file.stem}_ssimu2.log"
             calculate_xpsnr(src_file, output_file, xpsnr_txt_path)
             calculate_ssimu2(src_file, output_file, ssimu2_txt_path, ranges, skip)
 
@@ -455,9 +455,9 @@ def calculate_zones(tmp_dir, ranges, method, cq, video_params, max_pos_dev, max_
             else:
                 method = 'minimum'
 
-            ssimu2_txt_path = output_dir / f"{src_file.stem}_ssimu2.log"
+            ssimu2_txt_path = tmp_dir / f"{src_file.stem}_ssimu2.log"
             ssimu2_scores, skip = get_ssimu2(ssimu2_txt_path)
-            xpsnr_txt_path = output_dir / f"{src_file.stem}_xpsnr.log"
+            xpsnr_txt_path = tmp_dir / f"{src_file.stem}_xpsnr.log"
             xpsnr_scores, _ = get_xpsnr(xpsnr_txt_path)
 
             calculation_zones_txt_path = tmp_dir / f"{method}_zones.txt"
