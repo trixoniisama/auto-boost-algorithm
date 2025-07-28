@@ -236,7 +236,9 @@ def calculate_ssimu2(src_file, enc_file, ssimu2_txt_path, ranges, skip):
     with ssimu2_txt_path.open("w") as file:
         file.write(f"skip: {skip}\n")
     iter = 0
-    with tqdm(total=floor(len(source_clip)), desc=f'Calculating SSIMULACRA 2 scores', unit=" frames") as pbar:
+
+    # smoothing : 0.0 -> 1.0 (Average -> Realtime) (Default: 0.3)
+    with tqdm(total=floor(len(source_clip)), desc=f'Calculating SSIMULACRA 2 scores', unit=" frames", smoothing=0) as pbar:
         #for i in range(len(ranges) - 1):
             if skip > 1:
                 cut_source_clip = source_clip.std.SelectEvery(cycle=skip, offsets=1)
@@ -255,25 +257,40 @@ def calculate_ssimu2(src_file, enc_file, ssimu2_txt_path, ranges, skip):
                     file.write(f"{iter}: {score}\n")
                 pbar.update(skip)
 
-def calculate_xpsnr(src_file, enc_path, xpsnr_txt_path):
+def calculate_xpsnr(src_file, enc_file, xpsnr_txt_path) -> None:
     if IS_WINDOWS:
         xpsnr_txt_path = f"{src_file.stem}_xpsnr.log"
         src_file_dir = src_file.parent
         os.chdir(src_file_dir)
 
     xpsnr_command = [
-        "ffmpeg",
-        "-i", src_file,
-        "-i", enc_path,
-        "-lavfi", f"xpsnr=stats_file={xpsnr_txt_path}",
-        "-f", "null", NULL_DEVICE
+        'ffmpeg',
+        '-i', src_file,
+        '-i', enc_file,
+        '-lavfi', f'xpsnr=stats_file={xpsnr_txt_path}',
+        '-f', 'null', NULL_DEVICE
     ]
 
-    try:
-        subprocess.run(xpsnr_command, text=True, check=True)
-    except subprocess.CalledProcessError as e:
-        print(f"XPSNR encountered an error:\n{e}")
-        exit(-2)
+    source_clip = core.lsmas.LWLibavSource(source=src_file, cache=0)
+    encoded_clip = core.lsmas.LWLibavSource(source=enc_file, cache=0)
+
+    print(f'source: {len(source_clip)} frames')
+    print(f'encode: {len(encoded_clip)} frames')
+
+    # smoothing : 0.0 -> 1.0 (Average -> Realtime) (Default: 0.3)
+    with tqdm(total=floor(len(source_clip)), desc=f'Calculating XPSNR scores', unit=' frames', smoothing=0) as pbar:
+        try:
+            xpsnr_process = subprocess.Popen(xpsnr_command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,universal_newlines=True)
+            for line in xpsnr_process.stdout:
+                match = re.search(r'frame=\s*(\d+)', line)
+                if match:
+                    current_frame_progress = int(match.group(1))
+                    pbar.n = current_frame_progress
+                    pbar.refresh()
+
+        except subprocess.CalledProcessError as e:
+            print(f'XPSNR encountered an error:\n{e}')
+            exit(-2)
 
 def get_xpsnr(xpsnr_txt_path):
     count=0
@@ -475,7 +492,6 @@ def calculate_zones(tmp_dir, ranges, method, cq, video_params, max_pos_dev, max_
                     for avg_index in range(skip):
                         xpsnr_scores_averaged += xpsnr_scores[xpsnr_index + avg_index - 1]
                     xpsnr_scores_averaged /= skip
-                    print(method)
                     if method == 'multiplied':
                         calculation_score = xpsnr_scores_averaged * ssimu2_score
                     elif method == 'minimum':
