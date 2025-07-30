@@ -436,11 +436,11 @@ def calculate_zones(tmp_dir, ranges, method, cq, video_params, max_pos_dev, max_
         case 1 | 2:
             if method == 1:
                 metric = 'ssimu2'
-                metric_txt_path = output_dir / f'{src_file.stem}_{metric}.log'
+                metric_txt_path = tmp_dir / f'{src_file.stem}_{metric}.log'
                 metric_scores, skip = get_ssimu2(metric_txt_path)
             else:
                 metric = 'xpsnr'
-                metric_txt_path = output_dir / f'{src_file.stem}_{metric}.log'
+                metric_txt_path = tmp_dir / f'{src_file.stem}_{metric}.log'
                 metric_scores, skip = get_xpsnr(metric_txt_path)
 
             metric_zones_txt_path = tmp_dir / f'{metric}_zones.txt'
