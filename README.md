@@ -1,8 +1,10 @@
 # Auto-boost Algorithm
 
-## Auto-Boost-Next:
+## Auto-Boost-Essential:
 
-_Soon:tm:_
+Latest encoding script intended for use with [SVT-AV1-Essential](https://github.com/nekotrix/SVT-AV1-Essential) with a bunch of convenient features.
+
+Details are given in the Auto-Boost-Essential folder [README](Auto-Boost-Essential).
 
 ## Version 2.5: SSIMULACRA2&XPSNR-based
 
