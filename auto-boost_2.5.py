@@ -262,6 +262,8 @@ def calculate_xpsnr(src_file, enc_file, xpsnr_txt_path) -> None:
         xpsnr_tmp_txt_path = Path(f"{src_file.stem}_xpsnr.log")
         src_file_dir = src_file.parent
         os.chdir(src_file_dir)
+    else:
+        xpsnr_tmp_txt_path = xpsnr_txt_path
 
     xpsnr_command = [
         'ffmpeg',
@@ -292,7 +294,8 @@ def calculate_xpsnr(src_file, enc_file, xpsnr_txt_path) -> None:
             print(f'XPSNR encountered an error:\n{e}')
             exit(-2)
 
-    shutil.move(xpsnr_tmp_txt_path, xpsnr_txt_path)
+    if IS_WINDOWS:
+        shutil.move(xpsnr_tmp_txt_path, xpsnr_txt_path)
 
 def get_xpsnr(xpsnr_txt_path):
     count=0
