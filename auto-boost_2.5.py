@@ -259,7 +259,7 @@ def calculate_ssimu2(src_file, enc_file, ssimu2_txt_path, ranges, skip):
 
 def calculate_xpsnr(src_file, enc_file, xpsnr_txt_path) -> None:
     if IS_WINDOWS:
-        xpsnr_txt_path = f"{src_file.stem}_xpsnr.log"
+        xpsnr_tmp_txt_path = Path(f"{src_file.stem}_xpsnr.log")
         src_file_dir = src_file.parent
         os.chdir(src_file_dir)
 
@@ -267,7 +267,7 @@ def calculate_xpsnr(src_file, enc_file, xpsnr_txt_path) -> None:
         'ffmpeg',
         '-i', src_file,
         '-i', enc_file,
-        '-lavfi', f'xpsnr=stats_file={xpsnr_txt_path}',
+        '-lavfi', f'xpsnr=stats_file={str(xpsnr_tmp_txt_path)}',
         '-f', 'null', NULL_DEVICE
     ]
 
@@ -291,6 +291,8 @@ def calculate_xpsnr(src_file, enc_file, xpsnr_txt_path) -> None:
         except subprocess.CalledProcessError as e:
             print(f'XPSNR encountered an error:\n{e}')
             exit(-2)
+
+    shutil.move(xpsnr_tmp_txt_path, xpsnr_txt_path)
 
 def get_xpsnr(xpsnr_txt_path):
     count=0
