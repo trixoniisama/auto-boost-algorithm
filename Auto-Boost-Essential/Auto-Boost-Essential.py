@@ -43,6 +43,7 @@ import subprocess
 import argparse
 import shutil
 import struct
+import glob
 import os
 import re
 
@@ -94,7 +95,7 @@ no_boosting = args.no_boosting
 version = args.version
 
 if version:
-    print(f"Auto-Boost-Essential v1.0 (Release)")
+    print(f"Auto-Boost-Essential v1.1 (Release)")
     exit(1)
 
 if not os.path.exists(src_file):
@@ -109,9 +110,13 @@ if final_speed not in ["slower", "slow", "medium", "fast", "faster"]:
     print(f"The final pass speed must be either slower, slow, medium, fast or faster.")
     exit(1)
 
-if quality not in ["low", "medium", "high"]:
-    print(f"The quality preset must be either low, medium or high.")
-    exit(1)
+if "--crf" in fast_params:
+    index = fast_params.index("--crf")
+    quality = int(fast_params[index+6:index+8])
+else:
+    if quality not in ["low", "medium", "high"]:
+        print(f"The quality preset must be either low, medium or high.")
+        exit(1)
 
 if stage != 0 and resume:
     print(f"Resume will auto-resume from the last (un)completed stage. You cannot provide both stage and resume.")
@@ -157,8 +162,9 @@ def read_from_offset(file_path: Path, offset: int, size: int) -> bytes:
 def merge_ivf_parts(base_path: Path, output_path: Path, fwidth: int, fheight: int) -> None:
     # Collect ivf parts
     base = base_path.stem.split("__")[0]
+    base_escaped = glob.escape(base)
     parts = sorted(
-        base_path.parent.glob(f"{base}__*.ivf"),
+        base_path.parent.glob(f"{base_escaped}__*.ivf"),
         key=lambda p: int(p.stem.split("__")[-1])
     )
     final_part = base_path.parent / f"{base}.ivf"
@@ -318,7 +324,8 @@ def get_next_filename(base_path: Path) -> Path:
     suffix = base_path.suffix
     parent = base_path.parent
 
-    files = sorted(parent.glob(f"{base}__*{suffix}"), key=lambda x: int(x.stem.split("__")[-1]))
+    base_escaped = glob.escape(base)
+    files = sorted(parent.glob(f"{base_escaped}__*{suffix}"), key=lambda x: int(x.stem.split("__")[-1]))
     if not files:
         return parent / f"{base}__1{suffix}"
     
@@ -336,7 +343,8 @@ def get_total_previous_frames(enc_file: Path) -> int:
     :rtype: int
     """
     base = enc_file.stem.split("__")[0]
-    ivf_files = sorted(enc_file.parent.glob(f"{base}__*.ivf"), key=lambda x: int(x.stem.split('__')[-1]))
+    base_escaped = glob.escape(base)
+    ivf_files = sorted(enc_file.parent.glob(f"{base_escaped}__*.ivf"), key=lambda x: int(x.stem.split('__')[-1]))
     
     total = 0
     for f in ivf_files:
@@ -435,7 +443,10 @@ def set_resuming_params(enc_file: Path, zones_file: Path, state: str) -> tuple[s
     if verbose:
         print(f"Source: {nframe_src} frames\nEncode: {nframe_enc} frames")
 
-    if nframe_src == nframe_enc:
+    if nframe_enc > nframe_src:
+        print(f"Something wrong occurred with resume, report the issue and try re-running the {state} pass from scratch as a temporary workaround...")
+        exit(1)
+    elif nframe_enc == nframe_src:
         print(f"Nothing to resume in the {state} pass. Continuing...")
         if state == "final":
             print(f'Stage 4 complete!')
@@ -465,7 +476,10 @@ def fast_pass() -> None:
     """
     Quick fast pass to gather scene complexity information.
     """
-    encoder_params = f' --speed {fast_speed} --quality {quality} --fast-decode 2 ' 
+    if type(quality) == int:
+        encoder_params = f' --speed {fast_speed} --fast-decode 2 ' 
+    else:
+        encoder_params = f' --speed {fast_speed} --quality {quality} --fast-decode 2 ' 
     # --color-primaries bt709 --transfer-characteristics bt709 --matrix-coefficients bt709
     if fast_params:
         encoder_params = f'{fast_params} ' + encoder_params
@@ -521,10 +535,21 @@ def fast_pass() -> None:
 
             fast_pass_command_vspipe.stdout.close()
 
-            fast_pass_command_vspipe.wait()
-            fast_pass_command_svt.wait()
+            vspipe_returncode = fast_pass_command_vspipe.wait()
+            svt_returncode = fast_pass_command_svt.wait()
+            
+            if vspipe_returncode != 0:
+                print(f"The fast pass encountered an error: vspipe exited with code {vspipe_returncode}")
+                exit(1)
+                
+            if svt_returncode != 0:
+                print(f"The fast pass encountered an error: SVT-AV1 exited with code {svt_returncode}")
+                exit(1)
 
         except subprocess.CalledProcessError as e:
+            print(f"The fast pass encountered an error:\n{e}")
+            exit(1)
+        except Exception as e:
             print(f"The fast pass encountered an error:\n{e}")
             exit(1)
 
@@ -536,7 +561,10 @@ def final_pass() -> None:
     """
     Final encoding pass with proper zone offsetting for resume functionality.
     """
-    encoder_params = f' --speed {final_speed} --quality {quality} '
+    if type(quality) == int:
+        encoder_params = f' --speed {final_speed} '
+    else:
+        encoder_params = f' --speed {final_speed} --quality {quality} '
     if final_params:
         encoder_params = f'{final_params} ' + encoder_params
 
@@ -603,10 +631,21 @@ def final_pass() -> None:
 
             final_pass_command_vspipe.stdout.close()
 
-            final_pass_command_vspipe.wait()
-            final_pass_svt_process.wait()
+            vspipe_returncode = final_pass_command_vspipe.wait()
+            svt_returncode = final_pass_svt_process.wait()
+            
+            if vspipe_returncode != 0:
+                print(f"The final pass encountered an error: vspipe exited with code {vspipe_returncode}")
+                exit(1)
+                
+            if svt_returncode != 0:
+                print(f"The final pass encountered an error: SVT-AV1 exited with code {svt_returncode}")
+                exit(1)
 
         except subprocess.CalledProcessError as e:
+            print(f"The final pass encountered an error:\n{e}")
+            exit(1)
+        except Exception as e:
             print(f"The final pass encountered an error:\n{e}")
             exit(1)
         
@@ -635,8 +674,6 @@ def calculate_ssimu2() -> None:
     if verbose:
         print(f"Source: {len(source_clip)} frames\nEncode: {len(encoded_clip)} frames")
     
-    print("Calculating SSIMULACRA 2 scores...")
-
     if cpu:
         result = core.vszip.Metrics(source_clip, encoded_clip, mode=0)
     else:
@@ -650,8 +687,19 @@ def calculate_ssimu2() -> None:
                 print("vs-zip not found either. Check your installation.")
                 exit(1)
 
-    for index, frame in enumerate(result.frames()):
-        score = frame.props['_SSIMULACRA2']
+    score_list = []
+
+    def get_ssimu2props(n: int, f: vs.VideoFrame) -> None:
+        score_list.append(f.props.get('_SSIMULACRA2') )
+
+    clip_async_render(
+        result,
+        outfile=None,
+        progress=f'Calculating SSIMULACRA2 scores...',
+        callback=get_ssimu2props
+    )
+
+    for index, score in enumerate(score_list):
         with ssimu2_log_file.open("w" if index == 0 else "a") as file:
             file.write(f"{index}: {score}\n")
 
@@ -735,6 +783,8 @@ def calculate_zones(ranges: list[float], hr: bool, nframe: int) -> None:
             crf = 35 if hr else 30
         case "high":
             crf = 30 if hr else 25
+        case _:
+            crf = quality
 
     for index in range(len(ranges)):
         

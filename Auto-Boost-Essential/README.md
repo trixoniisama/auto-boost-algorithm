@@ -60,6 +60,14 @@ The script is open to contributions!
 Namely, I'm looking to improve the boosting logic to increase consistency further, with little to no additional performance implications.  
 Code refactors for clean-up and fixes are also appreciated!
 
+### Future
+
+Apart from said boosting logic refactor, the following features are being considered:
+- Re-introducing metrics skipping for greater speeds
+- Comparing SSIMULACRA2 to XPSNR (because vs-zip's implementation is crazy fast and universal anyway due to running on CPU)
+- More robust error handling
+- Making the CLI better looking
+
 ## Benchmarks:
 
 |                    Metrics                    |                    Speed                    |
