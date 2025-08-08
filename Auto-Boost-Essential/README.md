@@ -30,7 +30,7 @@ yay -S svt-av1-essential-git vapoursynth-plugin-vsjetpack vapoursynth-plugin-vsh
 
 Auto-Boost-Essential can be considered a helper script, as all you need to do is provide an input video file and it will manage everything for you:
 ```bash
-python Auto-Boost-Essential.py "my_video_file.mp4"
+python Auto-Boost-Essential.py -i "my_video_file.mp4"
 ```
 
 Even though the above command is sufficient to run the script, one may use additional parameters to tweak the experience, for instance:
@@ -53,6 +53,12 @@ Even though the above command is sufficient to run the script, one may use addit
 | `--final-params` | Custom final encoding parameters |
 
 Yes, the script is even capable of resuming unfinished encodes like Av1an, and can also be run with boosting disabled if all you care is the convenience of a SVT-AV1-Essential wrapper.
+
+### Known-issue
+
+The encoding process can hang in the last dozen of frames for certain sources. It can be caused by some specific combination of parameters or by the input file being malformed.  
+The recommended procedure as of now is: to first backup the ivf file, and to then try to resume with a limited set of parameters. When the issue is caused by the source being malformed, it is possible the encode is complete but the process isn't, in which case simply interrupt the process by hand and manually copy the ivf file wherever you want.  
+Proper workarounds are actively being researched.
 
 ### Contribute
 
