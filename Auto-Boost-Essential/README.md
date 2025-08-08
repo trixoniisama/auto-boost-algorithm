@@ -5,7 +5,7 @@ Auto-Boost-Essential is the latest iteration of the Auto-Boost formula, streamli
 This encoding script is intended to be paired with my [SVT-AV1-Essential](https://github.com/nekotrix/SVT-AV1-Essential) encoder fork.  
 SVT-AV1-Essential sports *excellent* quality consistency, but Auto-Boost-Essential offers *exceptional* consistency!
 
-**Here is how it works:** the script runs a first encoder fass-pass, finds scenes based on the introduced keyframes, calculate metrics scores, automatically adjusts the CRF of scenes in order to increase quality consistency and then runs a final-pass with these adjustements.  
+**Here is how it works:** the script runs a first encoder fast-pass, finds scenes based on the introduced keyframes, calculate metrics scores, automatically adjusts the CRF of scenes in order to increase quality consistency and then runs a final-pass with these adjustements.  
 
 The quality metric at play this time again is **SSIMULACRA2**.
 
@@ -84,5 +84,6 @@ Apart from said boosting logic refactor, the following features are being consid
 *Speed may vary depending on your hardware configuration and source resolution.*
 
 The above results are not even best-case scenarios. The selected samples are very complex. More gains are expected on your average clip, granted it contains more than one scene at a minimum!
+
 
 *Join us over at [AV1 weeb edition](https://discord.gg/83dRFDFDp7)!*
