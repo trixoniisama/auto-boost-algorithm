@@ -415,7 +415,7 @@ def get_file_info(file: Path, mode: str) -> tuple[list[int], bool, int, int, int
             console=console
         ) as progress:
 
-        task = progress.add_task("[green]Finding scenes...", total=nframe)
+        task = progress.add_task("[green]Finding scenes                ", total=nframe)
 
         def progress_func(n: int, num_frames: int) -> None:
             progress.update(task, completed=n)
@@ -431,7 +431,7 @@ def get_file_info(file: Path, mode: str) -> tuple[list[int], bool, int, int, int
             callback=get_props
         )
 
-        progress.update(task, description="[cyan]Found scenes...", completed=nframe)
+        progress.update(task, description="[cyan]Found scenes                  ", completed=nframe)
     
     if 'src' in locals():
         del src
@@ -508,6 +508,7 @@ def set_resuming_params(enc_file: Path, zones_file: Path, state: str) -> tuple[s
     return f"--skip {total_resume_point}", f"--start {total_resume_point}", offset_zones_path, fwidth, fheight, ffpsnum, ffpsden
 
 def track_progress(vspipe_cmd: list[str], svt_cmd: list[str], enc_pass: str):
+    is_fast = " " if enc_pass == "fast" else ""
     frame_pattern = re.compile(r"Frame:\s+(\d+)/(\d+)(?:\s+\(([\d.]+)\s+fps\))?")
 
     with Progress(
@@ -521,7 +522,7 @@ def track_progress(vspipe_cmd: list[str], svt_cmd: list[str], enc_pass: str):
         console=console
     ) as progress:
 
-        task = progress.add_task("[yellow]Initializing...", total=None)
+        task = progress.add_task("[yellow]Initializing                  ", total=None)
 
         try:
             vspipe_proc = subprocess.Popen(
@@ -555,7 +556,7 @@ def track_progress(vspipe_cmd: list[str], svt_cmd: list[str], enc_pass: str):
                         if progress.tasks[task].total is None:
                             progress.update(
                                 task,
-                                description=f"[green]Encoding {enc_pass} pass...",
+                                description=f"[green]Encoding {enc_pass} pass           {is_fast}",
                                 total=total_frames
                             )
 
@@ -570,7 +571,7 @@ def track_progress(vspipe_cmd: list[str], svt_cmd: list[str], enc_pass: str):
 
             progress.update(
                 task,
-                description=f"[green]Finalizing {enc_pass} pass...",
+                description=f"[green]Finalizing {enc_pass} pass         {is_fast}",
                 completed=progress.tasks[task].total - 1
             )
             
@@ -590,7 +591,7 @@ def track_progress(vspipe_cmd: list[str], svt_cmd: list[str], enc_pass: str):
             
             progress.update(
                 task,
-                description=f"[cyan]Completed {enc_pass} pass...",
+                description=f"[cyan]Completed {enc_pass} pass          {is_fast}",
                 completed=progress.tasks[task].total
             )
 
@@ -788,7 +789,7 @@ def calculate_ssimu2() -> None:
             console=console
         ) as progress:
 
-        task = progress.add_task("[green]Calculating SSIMULACRA2 scores...", total=source_clip.num_frames)
+        task = progress.add_task("[green]Calculating SSIMULACRA2 scores", total=source_clip.num_frames)
 
         def progress_func(n: int, num_frames: int) -> None:
             progress.update(task, completed=n)
@@ -800,7 +801,7 @@ def calculate_ssimu2() -> None:
             callback=get_ssimu2props
         )
 
-        progress.update(task, description="[cyan]Calculated SSIMULACRA2 scores...", completed=source_clip.num_frames)
+        progress.update(task, description="[cyan]Calculated SSIMULACRA2 scores ", completed=source_clip.num_frames)
 
     if 'source_clip' in locals() and 'encoded_clip' in locals():
         del source_clip
