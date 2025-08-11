@@ -36,7 +36,8 @@
 # ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER 
 # DEALINGS IN THE SOFTWARE.
 
-from vstools import vs, core, clip_async_render, get_render_progress, FPSColumn
+from vstools import vs, core, clip_async_render
+from vstools.functions.progress import get_render_progress, FPSColumn
 from rich.progress import Progress, TextColumn, BarColumn, TimeElapsedColumn, TimeRemainingColumn, SpinnerColumn
 from rich.console import Console
 from statistics import quantiles
