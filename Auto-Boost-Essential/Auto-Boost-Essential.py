@@ -219,7 +219,7 @@ def merge_ivf_parts(base_path: Path, output_path: Path, fwidth: int, fheight: in
             offset += 12 + size                           # Size of frame + size of frame header
     
     if verbose:
-        print(f"Merged {len(parts)} chunks into {output_path} ({num_frames} total frames)")
+        console.print(f"Merged {len(parts)} chunks into {output_path} ({num_frames} total frames)")
 
 def create_offset_zones_file(original_zones_path: Path, offset_zones_path: Path, offset_frames: int) -> None:
     """
@@ -609,12 +609,14 @@ def fast_pass() -> None:
     Quick fast pass to gather scene complexity information.
     """
     if type(quality) == int:
-        encoder_params = f' --speed {fast_speed} ' 
+        encoder_params = f'--speed {fast_speed}' 
     else:
-        encoder_params = f' --speed {fast_speed} --quality {quality} ' 
-    # --color-primaries bt709 --transfer-characteristics bt709 --matrix-coefficients bt709
+        encoder_params = f'--speed {fast_speed} --quality {quality}' 
     if fast_params:
         encoder_params = f'{fast_params} ' + encoder_params
+    
+    if verbose:
+        console.print(f'Fast params: "{encoder_params}"')
 
     encoder_params_list = encoder_params.split()
 
@@ -672,11 +674,14 @@ def final_pass() -> None:
     Final encoding pass with proper zone offsetting for resume functionality.
     """
     if type(quality) == int:
-        encoder_params = f' --speed {final_speed} '
+        encoder_params = f'--speed {final_speed}'
     else:
-        encoder_params = f' --speed {final_speed} --quality {quality} '
+        encoder_params = f'--speed {final_speed} --quality {quality}'
     if final_params:
         encoder_params = f'{final_params} ' + encoder_params
+
+    if verbose:
+        console.print(f'Final params: "{encoder_params}"')
 
     encoder_params_list = encoder_params.split()
 
