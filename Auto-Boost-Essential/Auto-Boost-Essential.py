@@ -100,7 +100,7 @@ no_boosting = args.no_boosting
 version = args.version
 
 if version:
-    print(f"Auto-Boost-Essential v1.2 (Release)")
+    print(f"Auto-Boost-Essential v1.3 (Release)")
     exit(1)
 
 if not os.path.exists(src_file):
@@ -441,7 +441,7 @@ def get_file_info(file: Path, mode: str) -> tuple[list[int], bool, int, int, int
         f.write("\n".join(map(str, iframe_list)))
 
     if verbose:
-        console.print("I-Frames:", iframe_list)
+        print("I-Frames:", iframe_list)
         console.print("Total I-Frames:", len(iframe_list))
 
     with open(kf_file, "a") as f:
@@ -765,23 +765,31 @@ def calculate_ssimu2() -> None:
     if verbose:
         console.print(f"Source: {len(source_clip)} frames\nEncode: {len(encoded_clip)} frames")
     
+    skip = 3
+    if skip > 1:
+        cut_source_clip = source_clip[::skip]
+        cut_encoded_clip = encoded_clip[::skip]
+    else:
+        cut_source_clip = source_clip
+        cut_encoded_clip = encoded_clip
+
     if cpu:
-        result = core.vszip.Metrics(source_clip, encoded_clip, mode=0)
+        result = core.vszip.Metrics(cut_source_clip, cut_encoded_clip, mode=0)
     else:
         try:
-            result = core.vship.SSIMULACRA2(source_clip, encoded_clip)
+            result = core.vship.SSIMULACRA2(cut_source_clip, cut_encoded_clip)
         except:
             console.print(f"[yellow]Vship not found or available, defaulting to vs-zip.")
             try:
-                result = core.vszip.Metrics(source_clip, encoded_clip, mode=0)
+                result = core.vszip.Metrics(cut_source_clip, cut_encoded_clip, mode=0)
             except:
                 console.print(f"[red]vs-zip not found either. Check your installation.")
                 exit(1)
 
-    score_list = []
+    score_list = [None] * result.num_frames
 
     def get_ssimu2props(n: int, f: vs.VideoFrame) -> None:
-        score_list.append(f.props.get('_SSIMULACRA2') )
+        score_list[n] = float(f.props.get('_SSIMULACRA2'))
 
     with Progress(
             SpinnerColumn(),
@@ -794,10 +802,10 @@ def calculate_ssimu2() -> None:
             console=console
         ) as progress:
 
-        task = progress.add_task("[green]Calculating SSIMULACRA2 scores", total=source_clip.num_frames)
+        task = progress.add_task("[green]Calculating SSIMULACRA2 scores", total=cut_source_clip.num_frames*skip)
 
         def progress_func(n: int, num_frames: int) -> None:
-            progress.update(task, completed=n)
+            progress.update(task, advance=skip)
 
         clip_async_render(
             result,
@@ -806,16 +814,19 @@ def calculate_ssimu2() -> None:
             callback=get_ssimu2props
         )
 
-        progress.update(task, description="[cyan]Calculated SSIMULACRA2 scores ", completed=source_clip.num_frames)
+        progress.update(task, description="[cyan]Calculated SSIMULACRA2 scores ", completed=cut_source_clip.num_frames*skip)
 
     if 'source_clip' in locals() and 'encoded_clip' in locals():
         del source_clip
         del encoded_clip
         gc.collect()
 
+    skip_offset = 0
     for index, score in enumerate(score_list):
         with ssimu2_log_file.open("w" if index == 0 else "a") as file:
-            file.write(f"{index}: {score}\n")
+            for i in range(skip):
+                file.write(f"{index+skip_offset+i}: {score}\n")
+            skip_offset += skip - 1
 
 def metrics_aggregation(score_list: list[float]) -> tuple[float, float]:
     """
@@ -920,10 +931,7 @@ def calculate_zones(ranges: list[float], hr: bool, nframe: int) -> None:
             end_range = ranges[index+1]
 
         if verbose:
-            console.print(f'Chunk:  [{ranges[index]}:{end_range}]\n'
-                          f'15th percentile: {ssimu2_percentile_15_total[index]:.4f}\n'
-                          f'CRF adjustment: {-adjustment}\n'
-                          f'Final CRF: {new_crf}')
+            console.print(f'Chunk: [{ranges[index]}:{end_range}] / 15th percentile: {ssimu2_percentile_15_total[index]:.4f} / CRF adjustment: {-adjustment} / Final CRF: {new_crf}')
 
         if index == 0:
             with zones_file.open("w") as file:
@@ -933,6 +941,8 @@ def calculate_zones(ranges: list[float], hr: bool, nframe: int) -> None:
                 file.write(f"{ranges[index]},{end_range-1},{new_crf};")
     
     console.print("[cyan]Successfully computed zones.")
+
+console.print(f"\n[bold]Auto-boost start!")
 
 if no_boosting:
     stage = 4
@@ -971,6 +981,8 @@ match stage:
             print(f'Stage 4 complete!')
     case 1:
         fast_pass()
+        with open(stage_file, "w") as f:
+            f.write("2")
         print(f'Stage 1 complete!')
     case 2:
         try:
@@ -978,6 +990,8 @@ match stage:
         except KeyboardInterrupt:
             console.print("\n[yellow]Interrupted by user (Ctrl+C). Stopping...[/yellow]")
             exit(1)
+        with open(stage_file, "w") as f:
+            f.write("3")
         print(f'Stage 2 complete!')
     case 3:
         try:
@@ -986,10 +1000,14 @@ match stage:
         except KeyboardInterrupt:
             console.print("\n[yellow]Interrupted by user (Ctrl+C). Stopping...[/yellow]")
             exit(1)
+        with open(stage_file, "w") as f:
+            f.write("4")
         print(f'Stage 3 complete!')
     case 4:
         final_pass()
         shutil.move(tmp_final_output_file, final_output_file)
+        with open(stage_file, "w") as f:
+            f.write("5")
         if not no_boosting:
             print(f'Stage 4 complete!')
     case _:
