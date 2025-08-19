@@ -774,14 +774,14 @@ def calculate_ssimu2() -> None:
         cut_encoded_clip = encoded_clip
 
     if cpu:
-        result = core.vszip.Metrics(cut_source_clip, cut_encoded_clip, mode=0)
+        result = core.vszip.SSIMULACRA2(cut_source_clip, cut_encoded_clip)
     else:
         try:
             result = core.vship.SSIMULACRA2(cut_source_clip, cut_encoded_clip)
         except:
             console.print(f"[yellow]Vship not found or available, defaulting to vs-zip.")
             try:
-                result = core.vszip.Metrics(cut_source_clip, cut_encoded_clip, mode=0)
+                result = core.vszip.SSIMULACRA2(cut_source_clip, cut_encoded_clip)
             except:
                 console.print(f"[red]vs-zip not found either. Check your installation.")
                 exit(1)
@@ -789,7 +789,7 @@ def calculate_ssimu2() -> None:
     score_list = [None] * result.num_frames
 
     def get_ssimu2props(n: int, f: vs.VideoFrame) -> None:
-        score_list[n] = float(f.props.get('_SSIMULACRA2'))
+        score_list[n] = float(f.props.get('SSIMULACRA2'))
 
     with Progress(
             SpinnerColumn(),
