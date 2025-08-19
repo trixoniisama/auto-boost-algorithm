@@ -129,8 +129,8 @@ if stage != 0 and resume:
 
 if os.path.exists(tmp_dir):
     if resume and os.path.exists(stage_file): 
-        with open(stage_file, "r") as f:
-            lines = f.readlines()
+        with open(stage_file, "r") as file:
+            lines = file.readlines()
             stage_resume = int(lines[0].strip())
             if stage_resume == 5:
                 print(f'Final encode already finished. Nothing to resume.')
@@ -194,7 +194,7 @@ def merge_ivf_parts(base_path: Path, output_path: Path, fwidth: int, fheight: in
         framedata += read_from_offset(parts[i], 32, -1)
         i += 1
 
-    with open(output_path, "wb+") as f:
+    with open(output_path, "wb+") as file:
         header = struct.pack(
             '<4sHH4sHHIII4s',
             b'DKIF',        # Signature                             0x00
@@ -209,14 +209,14 @@ def merge_ivf_parts(base_path: Path, output_path: Path, fwidth: int, fheight: in
             b'\0\0\0\0'     # Reserved                              0x1C
             # Follows array of frame headers
         )
-        f.write(header)
-        f.write(framedata)
+        file.write(header)
+        file.write(framedata)
         offset = 32 # Frame data start
         for i in range(num_frames): # Rewrite timestamps
-            f.seek(offset)                                # Jump to header
-            size = int.from_bytes(f.read(4), 'little')    # Get size of frame data
-            f.write(i.to_bytes(8, "little"))              # Rewrite the timestamp
-            offset += 12 + size                           # Size of frame + size of frame header
+            file.seek(offset)                                # Jump to header
+            size = int.from_bytes(file.read(4), 'little')    # Get size of frame data
+            file.write(i.to_bytes(8, "little"))              # Rewrite the timestamp
+            offset += 12 + size                              # Size of frame + size of frame header
     
     if verbose:
         console.print(f"Merged {len(parts)} chunks into {output_path} ({num_frames} total frames)")
@@ -285,14 +285,14 @@ def create_offset_zones_file(original_zones_path: Path, offset_zones_path: Path,
 
 def read_ivf_frames(path: Path) -> tuple[bytes, list]:
     frames = []
-    with open(path, "rb") as f:
-        header = f.read(32) # IVF header
+    with open(path, "rb") as file:
+        header = file.read(32) # IVF header
         while True:
-            frame_header = f.read(12)
+            frame_header = file.read(12)
             if len(frame_header) < 12:
                 break
             size, timestamp = struct.unpack("<IQ", frame_header)
-            frame_data = f.read(size)
+            frame_data = file.read(size)
             if len(frame_data) < size:
                 break
             frames.append((size, timestamp, frame_data))
@@ -305,14 +305,14 @@ def trim_ivf_from_last_keyframe(ivf_path: Path, ivf_out_path: Path, last_gop_sta
         console.print(f"Encode frame count: {len(frames)}")
         console.print(f"Keeping {len(trimmed_frames)} frames (removing last GOP starting at frame {last_gop_start_index})")
 
-    with open(ivf_out_path, "wb") as f:
+    with open(ivf_out_path, "wb") as file:
         new_header = bytearray(header)
         new_header[24:28] = struct.pack("<I", len(trimmed_frames))
-        f.write(new_header)
+        file.write(new_header)
 
         for size, timestamp, frame_data in trimmed_frames:
-            f.write(struct.pack("<IQ", size, timestamp))
-            f.write(frame_data)
+            file.write(struct.pack("<IQ", size, timestamp))
+            file.write(frame_data)
 
 def get_next_filename(base_path: Path) -> Path:
     """
@@ -351,10 +351,10 @@ def get_total_previous_frames(enc_file: Path) -> int:
     ivf_files = sorted(enc_file.parent.glob(f"{base_escaped}__*.ivf"), key=lambda x: int(x.stem.split('__')[-1]))
     
     total = 0
-    for f in ivf_files:
-        with open(f, "rb") as ivf:
-            ivf.seek(24)
-            frame_count = int.from_bytes(ivf.read(4), "little")
+    for ivf in ivf_files:
+        with open(ivf, "rb") as file:
+            file.seek(24)
+            frame_count = int.from_bytes(file.read(4), "little")
             total += frame_count
     return total
 
@@ -376,9 +376,9 @@ def get_file_info(file: Path, mode: str) -> tuple[list[int], bool, int, int, int
         kf_file = tmp_dir / "info.txt"
 
     if kf_file.exists() and mode == "src" and (stage != 0 or resume):
-        with open(kf_file, "r") as f:
+        with open(kf_file, "r") as file:
             print("Loading cached scene information...")
-            lines = f.readlines()
+            lines = file.readlines()
             return [int(line.strip()) for line in lines[1:-3]], lines[0].strip() == "True", int(lines[-5].strip()) , int(lines[-4].strip()) , int(lines[-3].strip()), int(lines[-2].strip()), int(lines[-1].strip())
     try:
         if mode == "src":
@@ -395,8 +395,8 @@ def get_file_info(file: Path, mode: str) -> tuple[list[int], bool, int, int, int
 
     fwidth, fheight = src[0].width, src[0].height
     hr = True if fwidth * fheight > 1920 * 1080 else False
-    with open(kf_file, "w") as f:
-        f.write(str(hr)+"\n")
+    with open(kf_file, "w") as file:
+        file.write(str(hr)+"\n")
 
     # they're reversed for some reason
     ffpsnum = src.get_frame(0).props['_DurationDen']
@@ -437,15 +437,15 @@ def get_file_info(file: Path, mode: str) -> tuple[list[int], bool, int, int, int
         del src
         gc.collect()
 
-    with open(kf_file, "a") as f:
-        f.write("\n".join(map(str, iframe_list)))
+    with open(kf_file, "a") as file:
+        file.write("\n".join(map(str, iframe_list)))
 
     if verbose:
         print("I-Frames:", iframe_list)
         console.print("Total I-Frames:", len(iframe_list))
 
-    with open(kf_file, "a") as f:
-        f.write(f"\n{nframe}\n{fwidth}\n{fheight}\n{ffpsnum}\n{ffpsden}")
+    with open(kf_file, "a") as file:
+        file.write(f"\n{nframe}\n{fwidth}\n{fheight}\n{ffpsnum}\n{ffpsden}")
 
     return iframe_list, hr, nframe, fwidth, fheight, ffpsnum, ffpsden
 
@@ -822,8 +822,8 @@ def calculate_ssimu2() -> None:
         gc.collect()
 
     skip_offset = 0
-    for index, score in enumerate(score_list):
-        with ssimu2_log_file.open("w" if index == 0 else "a") as file:
+    with open(ssimu2_log_file, "w") as file:
+        for index, score in enumerate(score_list):
             for i in range(skip):
                 file.write(f"{index+skip_offset+i}: {score}\n")
             skip_offset += skip - 1
@@ -865,7 +865,7 @@ def calculate_zones(ranges: list[float], hr: bool, nframe: int) -> None:
         console.print(f"[red]Cannot find the metrics file. Did you run the previous stages?")
         exit(1)
 
-    with ssimu2_log_file.open("r") as file:
+    with open(ssimu2_log_file, "r") as file:
         for line in file:
             match = re.search(r"([0-9]+): ([0-9]+\.[0-9]+)", line)
             if match:
@@ -911,33 +911,32 @@ def calculate_zones(ranges: list[float], hr: bool, nframe: int) -> None:
         case _:
             crf = quality
 
-    for index in range(len(ranges)):
-        
-        # Calculate CRF adjustment using aggressive or normal multiplier
-        multiplier = 40 if aggressive else 20
-        adjustment = ceil((1.0 - (ssimu2_percentile_15_total[index] / ssimu2_average)) * multiplier)
-        new_crf = crf - adjustment
+    with open(zones_file, "w") as file:
+        for index in range(len(ranges)):
+            
+            # Calculate CRF adjustment using aggressive or normal multiplier
+            multiplier = 40 if aggressive else 20
+            adjustment = ceil((1.0 - (ssimu2_percentile_15_total[index] / ssimu2_average)) * multiplier)
+            new_crf = crf - adjustment
 
-        # Apply sane limits
-        limit = 10 if unshackle else 5
-        if adjustment < - limit: # Positive deviation (increasing CRF)
-            new_crf = crf + limit
-        elif adjustment > limit: # Negative deviation (decreasing CRF)
-            new_crf = crf - limit
+            # Apply sane limits
+            limit = 10 if unshackle else 5
+            if adjustment < - limit: # Positive deviation (increasing CRF)
+                new_crf = crf + limit
+            elif adjustment > limit: # Negative deviation (decreasing CRF)
+                new_crf = crf - limit
 
-        if index == len(ranges)-1:
-            end_range = nframe
-        else:
-            end_range = ranges[index+1]
+            if index == len(ranges)-1:
+                end_range = nframe
+            else:
+                end_range = ranges[index+1]
 
-        if verbose:
-            console.print(f'Chunk: [{ranges[index]}:{end_range}] / 15th percentile: {ssimu2_percentile_15_total[index]:.4f} / CRF adjustment: {-adjustment} / Final CRF: {new_crf}')
+            if verbose:
+                console.print(f'Chunk: [{ranges[index]}:{end_range}] / 15th percentile: {ssimu2_percentile_15_total[index]:.4f} / CRF adjustment: {-adjustment} / Final CRF: {new_crf}')
 
-        if index == 0:
-            with zones_file.open("w") as file:
+            if index == 0:
                 file.write(f"Zones : {ranges[index]},{end_range-1},{new_crf};")
-        else:
-            with zones_file.open("a") as file:
+            else:
                 file.write(f"{ranges[index]},{end_range-1},{new_crf};")
     
     console.print("[cyan]Successfully computed zones.")
@@ -951,8 +950,8 @@ match stage:
     case 0:
         if stage_resume < 2:
             fast_pass()
-            with open(stage_file, "w") as f:
-                f.write("2")
+            with open(stage_file, "w") as file:
+                file.write("2")
             print(f'Stage 1 complete!')
         if stage_resume < 3:
             try:
@@ -961,8 +960,8 @@ match stage:
             except KeyboardInterrupt:
                 console.print("\n[yellow]Interrupted by user (Ctrl+C). Stopping...[/yellow]")
                 exit(1)
-            with open(stage_file, "w") as f:
-                f.write("3")
+            with open(stage_file, "w") as file:
+                file.write("3")
             print(f'Stage 2 complete!')
         if stage_resume < 4:
             try:                
@@ -970,19 +969,19 @@ match stage:
             except KeyboardInterrupt:
                 console.print("\n[yellow]Interrupted by user (Ctrl+C). Stopping...[/yellow]")
                 exit(1)
-            with open(stage_file, "w") as f:
-                f.write("4")
+            with open(stage_file, "w") as file:
+                file.write("4")
             print(f'Stage 3 complete!')
         if stage_resume < 5:
             final_pass()
             shutil.move(tmp_final_output_file, final_output_file)
-            with open(stage_file, "w") as f:
-                f.write("5")
+            with open(stage_file, "w") as file:
+                file.write("5")
             print(f'Stage 4 complete!')
     case 1:
         fast_pass()
-        with open(stage_file, "w") as f:
-            f.write("2")
+        with open(stage_file, "w") as file:
+            file.write("2")
         print(f'Stage 1 complete!')
     case 2:
         try:
@@ -990,8 +989,8 @@ match stage:
         except KeyboardInterrupt:
             console.print("\n[yellow]Interrupted by user (Ctrl+C). Stopping...[/yellow]")
             exit(1)
-        with open(stage_file, "w") as f:
-            f.write("3")
+        with open(stage_file, "w") as file:
+            file.write("3")
         print(f'Stage 2 complete!')
     case 3:
         try:
@@ -1000,14 +999,14 @@ match stage:
         except KeyboardInterrupt:
             console.print("\n[yellow]Interrupted by user (Ctrl+C). Stopping...[/yellow]")
             exit(1)
-        with open(stage_file, "w") as f:
-            f.write("4")
+        with open(stage_file, "w") as file:
+            file.write("4")
         print(f'Stage 3 complete!')
     case 4:
         final_pass()
         shutil.move(tmp_final_output_file, final_output_file)
-        with open(stage_file, "w") as f:
-            f.write("5")
+        with open(stage_file, "w") as file:
+            file.write("5")
         if not no_boosting:
             print(f'Stage 4 complete!')
     case _:
