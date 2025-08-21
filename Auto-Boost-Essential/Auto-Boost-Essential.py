@@ -45,6 +45,7 @@ from math import ceil, log10
 from pathlib import Path
 import subprocess
 import argparse
+import platform
 import shutil
 import struct
 import glob
@@ -73,9 +74,16 @@ args = parser.parse_args()
 
 stage = int(args.stage)
 src_file = Path(args.input).resolve()
+if platform.system() == 'Windows':
+    src_file = type(src_file)(r"\\?" + rf"\{src_file}")
 file_ext = src_file.suffix
 output_dir = src_file.parent
-tmp_dir = Path(args.temp).resolve() if args.temp is not None else output_dir / src_file.stem
+if args.temp is not None:
+    tmp_dir = Path(args.temp).resolve()
+    if platform.system() == 'Windows':
+        tmp_dir = type(tmp_dir)(r"\\?" + rf"\{tmp_dir}")
+else:
+    tmp_dir = output_dir / src_file.stem
 vpy_file = tmp_dir / f"{src_file.stem}.vpy"
 cache_file = tmp_dir / f"{src_file.stem}.ffindex"
 fast_output_file = tmp_dir / f"{src_file.stem}_fastpass.ivf"
@@ -941,7 +949,7 @@ def calculate_zones(ranges: list[float], hr: bool, nframe: int) -> None:
     
     console.print("[cyan]Successfully computed zones.")
 
-console.print(f"\n[bold]Auto-boost start!")
+console.print(f"[bold]Auto-boost start!\n")
 
 if no_boosting:
     stage = 4
